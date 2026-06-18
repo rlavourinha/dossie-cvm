@@ -73,30 +73,38 @@ def _org(o) -> str:
 # gráfico de barras mensal (fluxo líquido CVM 44), SVG inline vertical
 # ---------------------------------------------------------------------------
 def _monthly_svg(months, values) -> str:
+    """Barras mensais de fluxo líquido — adapta-se à série inteira (sem janela):
+    em séries longas afina as barras, rotula esparsamente e marca a virada de ano."""
     n = len(months)
     if n == 0:
         return '<div class="lead">Sem movimentações no período.</div>'
-    W, H = 720, 230
-    padL, padR, padT, padB = 8, 8, 18, 26
+    W, H = 720, 240
+    padL, padR, padT, padB = 8, 8, 20, 30
     plotW, plotH = W - padL - padR, H - padT - padB
     y0 = padT + plotH / 2
     maxabs = max((abs(v) for v in values), default=1) or 1
-    sc = (plotH / 2 - 10) / maxabs
+    sc = (plotH / 2 - 12) / maxabs
     slot = plotW / n
-    bw = min(46, slot * 0.5)
+    bw = min(40, slot * 0.62)
+    show_vals = n <= 16
     p = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Fluxo líquido mensal CVM 44">']
     p.append(f'<line class="svg-zero" x1="{padL}" y1="{y0:.1f}" x2="{W-padR}" y2="{y0:.1f}"/>')
+    prev_year = None
     for i, (m, v) in enumerate(zip(months, values)):
         xc = padL + slot * i + slot / 2
         h = abs(v) * sc
         y = y0 - h if v >= 0 else y0
         color = "var(--buy)" if v >= 0 else "var(--sell)"
-        p.append(f'<rect x="{xc-bw/2:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{max(h,0.6):.1f}" rx="3" fill="{color}"/>')
-        vy = (y - 5) if v >= 0 else (y + h + 12)
-        p.append(f'<text class="svg-val" x="{xc:.1f}" y="{vy:.1f}" text-anchor="middle">{("+" if v>0 else "")}{v:,.0f}</text>')
-        p.append(f'<text class="svg-axis" x="{xc:.1f}" y="{H-9:.1f}" text-anchor="middle">{_mes(m)}</text>')
-    p.append(f'<text class="svg-bm" x="{padL}" y="{padT-6:.1f}">compra líq. (+)</text>')
-    p.append(f'<text class="svg-bm" x="{W-padR}" y="{H-9:.1f}" text-anchor="end">R$ mi</text>')
+        p.append(f'<rect x="{xc-bw/2:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{max(h,0.6):.1f}" rx="2" fill="{color}"/>')
+        if show_vals:
+            vy = (y - 5) if v >= 0 else (y + h + 12)
+            p.append(f'<text class="svg-val" x="{xc:.1f}" y="{vy:.1f}" text-anchor="middle">{("+" if v>0 else "")}{v:,.0f}</text>')
+        yr = m[:4]
+        if yr != prev_year:                       # rótulo só na virada de ano
+            p.append(f'<line class="svg-zero" x1="{xc-slot/2:.1f}" y1="{padT}" x2="{xc-slot/2:.1f}" y2="{H-padB}" opacity="0.35"/>')
+            p.append(f'<text class="svg-axis" x="{xc-slot/2+3:.1f}" y="{H-10:.1f}">{yr}</text>')
+            prev_year = yr
+    p.append(f'<text class="svg-bm" x="{padL}" y="{padT-7:.1f}">compra líq. (+) · R$ mi</text>')
     p.append("</svg>")
     return "".join(p)
 
@@ -120,6 +128,8 @@ def _recompra_section(rec: pd.DataFrame) -> tuple[str, dict]:
     ev = []
     for _, r in rec.iterrows():
         tipo = r["tipo"]
+        if tipo in ("opa", "debenture"):
+            continue  # oferta de aquisição / dívida — não é recompra de ações
         exec_q = r.get("qtd_executada")
         has_exec = not _na(exec_q) and exec_q > 0
         if tipo == "aprovacao":
@@ -199,14 +209,14 @@ def _cvm44_section(v: pd.DataFrame) -> tuple[str, dict]:
     org_line = " · ".join(f'{o}: <b>{_brl(s, True)}</b>' for o, s in by_org.items())
 
     body = f"""
-  <h2>Movimentações CVM 44 <span class="h-meta">Res. 44 art. 11 · VLMO</span></h2>
+  <h2>Movimentações CVM 44 <span class="h-meta">Res. 44 art. 11 · VLMO · {_mes(months[0])}–{_mes(months[-1])}</span></h2>
   <p class="lead">Compras e vendas declaradas por <b>controlador, administradores e tesouraria</b>
-    (Resolução CVM 44, art. 11). Fluxo líquido por mês e o detalhe pregão a pregão. {org_line}</p>
+    (Resolução CVM 44, art. 11), desde o IPO. <b>{len(v)}</b> movimentos · fluxo líquido por mês e o detalhe pregão a pregão. {org_line}</p>
   <div class="card chart-box" style="margin-top:14px">{chart}</div>
   <div class="card" style="margin-top:16px">
-    <table class="tbl"><thead><tr><th>Negócio</th><th>Órgão</th><th>Operação</th>
+    <div class="scroll"><table class="tbl"><thead><tr><th>Negócio</th><th>Órgão</th><th>Operação</th>
       <th class="num">Qtde</th><th class="num hide-sm">Preço</th><th class="num">Valor</th></tr></thead>
-      <tbody>{''.join(rows) or '<tr><td colspan=6 class=muted>Sem movimentações.</td></tr>'}</tbody></table>
+      <tbody>{''.join(rows) or '<tr><td colspan=6 class=muted>Sem movimentações.</td></tr>'}</tbody></table></div>
   </div>"""
     return body, {"net": net, "vol": vol, "n": len(v)}
 

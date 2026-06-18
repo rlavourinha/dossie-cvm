@@ -47,6 +47,8 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .tbl td{padding:10px 16px;border-bottom:1px solid rgba(34,50,60,.55);color:var(--paper)}
 .tbl tr:last-child td{border-bottom:0}
 .tbl tr:hover td{background:var(--panel2)}
+.scroll{max-height:540px;overflow-y:auto}
+.scroll .tbl th{position:sticky;top:0;z-index:1}
 .tbl .num{text-align:right}
 .tbl .ctr{text-align:center}
 .tbl .strong{font-weight:600}
