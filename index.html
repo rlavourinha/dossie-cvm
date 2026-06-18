@@ -1,0 +1,111 @@
+<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RDOR3 · Recompra & CVM 44</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,560;9..144,620&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B1015; --panel:#121A21; --panel2:#18242D; --line:#22323C;
+  --paper:#E8E6DD; --muted:#8A9AA4; --faint:#5B6B74;
+  --buy:#46B98A; --sell:#E0714C; --accent:#3FA7B5; --gold:#D7B45A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--paper);
+  font-family:'Inter',system-ui,sans-serif;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:38px 26px 64px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--accent)}
+
+.kicker{font:600 11px/1 'Inter',sans-serif;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:13px}
+h1{font-family:'Fraunces',serif;font-weight:560;font-size:clamp(28px,5vw,46px);line-height:1.03;letter-spacing:-.01em;margin:0 0 10px}
+h1 .tk{color:var(--accent);font-style:italic}
+.sub{color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center}
+.sub b{color:var(--paper);font-weight:500}
+.chip{font:600 10px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;text-transform:uppercase;padding:5px 9px;border:1px solid var(--line);border-radius:3px;color:var(--muted)}
+
+h2{font-family:'Fraunces',serif;font-weight:560;font-size:21px;margin:38px 0 16px;display:flex;align-items:baseline;gap:12px}
+h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spacing:.04em;text-transform:none}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:26px 0 8px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+.kpi{padding:18px 20px;border-right:1px solid var(--line)} .kpi:last-child{border-right:0}
+.kpi .lbl{font:600 10px/1 'Inter',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+.kpi .val{font:600 23px 'IBM Plex Mono',monospace}
+.kpi .val.pos{color:var(--buy)} .kpi .val.neg{color:var(--sell)} .kpi .val.acc{color:var(--accent)}
+.kpi .foot{font-size:12px;color:var(--muted);margin-top:7px}
+
+/* cartão / tabela */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.chart-box{padding:16px 18px 8px}
+.chart-box svg{width:100%;height:auto;display:block}
+.svg-zero{stroke:var(--faint);stroke-width:1}
+.svg-tkr{fill:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600}
+.svg-val{fill:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px}
+.svg-axis{fill:var(--faint);font-family:'IBM Plex Mono',monospace;font-size:10px}
+.svg-bm{fill:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px}
+
+.tbl{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:12.5px}
+.tbl th{font:600 10px/1 'Inter',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+  text-align:left;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.tbl td{padding:10px 16px;border-bottom:1px solid rgba(34,50,60,.55);color:var(--paper)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr:hover td{background:var(--panel2)}
+.tbl .num{text-align:right}
+.tbl .ctr{text-align:center}
+.tbl .strong{font-weight:600}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+
+.badge{font:600 9.5px 'Inter',sans-serif;letter-spacing:.07em;text-transform:uppercase;padding:3px 8px;border-radius:3px;white-space:nowrap}
+.b-compra{color:var(--buy);background:rgba(70,185,138,.13)}
+.b-venda{color:var(--sell);background:rgba(224,113,76,.13)}
+.b-aprovacao{color:var(--accent);background:rgba(63,167,181,.13)}
+.b-execucao{color:var(--gold);background:rgba(215,180,90,.14)}
+.b-encerramento,.b-cancelamento{color:var(--muted);border:1px solid var(--line)}
+
+.lead{color:var(--muted);font-size:13.5px;max-width:760px;margin:8px 0 0}
+.lead b{color:var(--paper);font-weight:500}
+footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex Mono',monospace;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-top:1px solid var(--line);padding-top:16px}
+
+@media (max-width:760px){
+  .kpis{grid-template-columns:repeat(2,1fr)} .kpi:nth-child(2){border-right:0}
+  .tbl .hide-sm{display:none}
+}
+</style></head>
+<body><div class="wrap">
+  <header>
+    <div class="kicker">Dossiê CVM · Recompra &amp; Insiders</div>
+    <h1>Rede D'Or São Luiz · <span class="tk">RDOR3</span></h1>
+    <div class="sub"><span>Saúde · Hospitais</span>·
+      <span>CNPJ <b>06.047.087/0001-39</b></span>·
+      <span>Gerado em <b>18/06/2026 15:01</b></span><span class="chip">v1 · RDOR3</span></div>
+  </header>
+  
+  <section class="kpis">
+    <div class="kpi"><div class="lbl">Programas de recompra</div><div class="val">3</div><div class="foot">aprovados</div></div>
+    <div class="kpi"><div class="lbl">Ações recompradas</div><div class="val acc">62,990,400</div><div class="foot">executado · concluídos</div></div>
+    <div class="kpi"><div class="lbl">Fluxo CVM 44 líquido</div><div class="val pos">+R$ 1.27 bi</div><div class="foot">compras − vendas</div></div>
+    <div class="kpi"><div class="lbl">Volume CVM 44</div><div class="val">R$ 1.29 bi</div><div class="foot">31 movimentos</div></div>
+  </section>
+  
+  <h2>Recompra de ações <span class="h-meta">programas &amp; execução</span></h2>
+  <p class="lead">Programas de recompra autorizados pelo Conselho e o quanto foi
+    <b>efetivamente recomprado</b> (dos comunicados de conclusão). Quantidade = limite
+    autorizado (programa) ou ações de fato adquiridas (execução).</p>
+  <div class="card" style="margin-top:14px">
+    <table class="tbl"><thead><tr><th>Data</th><th>Evento</th><th class="num">Quantidade</th>
+      <th class="num hide-sm">% float</th><th class="ctr hide-sm">Prazo</th><th class="ctr">Doc</th></tr></thead>
+      <tbody><tr><td class="muted">10/06/2026</td><td><span class="badge b-execucao">Recompra executada</span></td><td class="num strong">14,725,400 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1533440&numSequencia=1058146&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">15/12/2025</td><td><span class="badge b-execucao">Recompra executada</span></td><td class="num strong">18,265,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1457513&numSequencia=982225&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">15/12/2025</td><td><span class="badge b-aprovacao">Programa aprovado</span></td><td class="num strong">18,265,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1457537&numSequencia=982249&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">13/12/2024</td><td><span class="badge b-execucao">Recompra executada</span></td><td class="num strong">30,000,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1315621&numSequencia=840347&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">13/12/2024</td><td><span class="badge b-aprovacao">Programa aprovado</span></td><td class="num strong">30,000,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1315609&numSequencia=840335&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">11/06/2024</td><td><span class="badge b-aprovacao">Programa aprovado</span></td><td class="num strong">30,000,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1249058&numSequencia=773784&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr></tbody></table>
+  </div>
+  
+  <h2>Movimentações CVM 44 <span class="h-meta">Res. 44 art. 11 · VLMO</span></h2>
+  <p class="lead">Compras e vendas declaradas por <b>controlador, administradores e tesouraria</b>
+    (Resolução CVM 44, art. 11). Fluxo líquido por mês e o detalhe pregão a pregão. Controlador: <b>+R$ 1.28 bi</b> · Diretor: <b>R$ -8.9 mi</b></p>
+  <div class="card chart-box" style="margin-top:14px"><svg viewBox="0 0 720 230" role="img" aria-label="Fluxo líquido mensal CVM 44"><line class="svg-zero" x1="8" y1="111.0" x2="712" y2="111.0"/><rect x="55.4" y="111.0" width="46.0" height="0.6" rx="3" fill="var(--sell)"/><text class="svg-val" x="78.4" y="123.4" text-anchor="middle">-3</text><text class="svg-axis" x="78.4" y="221.0" text-anchor="middle">jan/26</text><rect x="196.2" y="98.4" width="46.0" height="12.6" rx="3" fill="var(--buy)"/><text class="svg-val" x="219.2" y="93.4" text-anchor="middle">+110</text><text class="svg-axis" x="219.2" y="221.0" text-anchor="middle">fev/26</text><rect x="337.0" y="73.8" width="46.0" height="37.2" rx="3" fill="var(--buy)"/><text class="svg-val" x="360.0" y="68.8" text-anchor="middle">+328</text><text class="svg-axis" x="360.0" y="221.0" text-anchor="middle">mar/26</text><rect x="477.8" y="98.8" width="46.0" height="12.2" rx="3" fill="var(--buy)"/><text class="svg-val" x="500.8" y="93.8" text-anchor="middle">+107</text><text class="svg-axis" x="500.8" y="221.0" text-anchor="middle">abr/26</text><rect x="618.6" y="28.0" width="46.0" height="83.0" rx="3" fill="var(--buy)"/><text class="svg-val" x="641.6" y="23.0" text-anchor="middle">+730</text><text class="svg-axis" x="641.6" y="221.0" text-anchor="middle">mai/26</text><text class="svg-bm" x="8" y="12.0">compra líq. (+)</text><text class="svg-bm" x="712" y="221.0" text-anchor="end">R$ mi</text></svg></div>
+  <div class="card" style="margin-top:16px">
+    <table class="tbl"><thead><tr><th>Negócio</th><th>Órgão</th><th>Operação</th>
+      <th class="num">Qtde</th><th class="num hide-sm">Preço</th><th class="num">Valor</th></tr></thead>
+      <tbody><tr><td class="muted">29/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">1,056,500</td><td class="num hide-sm">R$ 33.91</td><td class="num strong">R$ 35.8 mi</td></tr><tr><td class="muted">28/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">103,300</td><td class="num hide-sm">R$ 34.50</td><td class="num strong">R$ 3.6 mi</td></tr><tr><td class="muted">28/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">1,017,441</td><td class="num hide-sm">R$ 34.89</td><td class="num strong">R$ 35.5 mi</td></tr><tr><td class="muted">27/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">251,000</td><td class="num hide-sm">R$ 34.46</td><td class="num strong">R$ 8.6 mi</td></tr><tr><td class="muted">26/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">433,200</td><td class="num hide-sm">R$ 34.39</td><td class="num strong">R$ 14.9 mi</td></tr><tr><td class="muted">25/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">599,100</td><td class="num hide-sm">R$ 34.53</td><td class="num strong">R$ 20.7 mi</td></tr><tr><td class="muted">22/05/2026</td><td>Diretor</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">941</td><td class="num hide-sm">R$ 1,063.28</td><td class="num strong">R$ 1.0 mi</td></tr><tr><td class="muted">18/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">1,763,700</td><td class="num hide-sm">R$ 34.76</td><td class="num strong">R$ 61.3 mi</td></tr><tr><td class="muted">15/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">2,584,400</td><td class="num hide-sm">R$ 34.69</td><td class="num strong">R$ 89.7 mi</td></tr><tr><td class="muted">14/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">573,500</td><td class="num hide-sm">R$ 34.93</td><td class="num strong">R$ 20.0 mi</td></tr><tr><td class="muted">14/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">1,415,100</td><td class="num hide-sm">R$ 34.88</td><td class="num strong">R$ 49.4 mi</td></tr><tr><td class="muted">14/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">139,800</td><td class="num hide-sm">R$ 34.93</td><td class="num strong">R$ 4.9 mi</td></tr><tr><td class="muted">13/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">2,637,300</td><td class="num hide-sm">R$ 35.33</td><td class="num strong">R$ 93.2 mi</td></tr><tr><td class="muted">12/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">2,032,400</td><td class="num hide-sm">R$ 36.04</td><td class="num strong">R$ 73.2 mi</td></tr><tr><td class="muted">11/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">2,500,000</td><td class="num hide-sm">R$ 36.33</td><td class="num strong">R$ 90.8 mi</td></tr><tr><td class="muted">07/05/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">3,386,500</td><td class="num hide-sm">R$ 37.67</td><td class="num strong">R$ 127.6 mi</td></tr><tr><td class="muted">20/04/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">962,900</td><td class="num hide-sm">R$ 39.29</td><td class="num strong">R$ 37.8 mi</td></tr><tr><td class="muted">17/04/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">733,300</td><td class="num hide-sm">R$ 39.97</td><td class="num strong">R$ 29.3 mi</td></tr><tr><td class="muted">15/04/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">1,000,000</td><td class="num hide-sm">R$ 39.96</td><td class="num strong">R$ 40.0 mi</td></tr><tr><td class="muted">19/03/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">523,100</td><td class="num hide-sm">R$ 36.70</td><td class="num strong">R$ 19.2 mi</td></tr><tr><td class="muted">17/03/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">657,300</td><td class="num hide-sm">R$ 37.38</td><td class="num strong">R$ 24.6 mi</td></tr><tr><td class="muted">09/03/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">2,170,000</td><td class="num hide-sm">R$ 38.19</td><td class="num strong">R$ 82.9 mi</td></tr><tr><td class="muted">05/03/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">726,500</td><td class="num hide-sm">R$ 39.31</td><td class="num strong">R$ 28.6 mi</td></tr><tr><td class="muted">03/03/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">25,900</td><td class="num hide-sm">R$ 38.49</td><td class="num strong">R$ 997 mil</td></tr><tr><td class="muted">03/03/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">4,436,800</td><td class="num hide-sm">R$ 38.64</td><td class="num strong">R$ 171.4 mi</td></tr><tr><td class="muted">27/02/2026</td><td>Controlador</td><td><span class="badge b-compra">COMPRA</span></td><td class="num">2,875,700</td><td class="num hide-sm">R$ 40.80</td><td class="num strong">R$ 117.3 mi</td></tr><tr><td class="muted">03/02/2026</td><td>Diretor</td><td><span class="badge b-venda">VENDA</span></td><td class="num">7,000</td><td class="num hide-sm">R$ 43.78</td><td class="num strong">R$ 306 mil</td></tr><tr><td class="muted">03/02/2026</td><td>Diretor</td><td><span class="badge b-venda">VENDA</span></td><td class="num">50,000</td><td class="num hide-sm">R$ 43.68</td><td class="num strong">R$ 2.2 mi</td></tr><tr><td class="muted">02/02/2026</td><td>Diretor</td><td><span class="badge b-venda">VENDA</span></td><td class="num">50,000</td><td class="num hide-sm">R$ 43.06</td><td class="num strong">R$ 2.2 mi</td></tr><tr><td class="muted">02/02/2026</td><td>Diretor</td><td><span class="badge b-venda">VENDA</span></td><td class="num">50,000</td><td class="num hide-sm">R$ 42.98</td><td class="num strong">R$ 2.1 mi</td></tr><tr><td class="muted">09/01/2026</td><td>Diretor</td><td><span class="badge b-venda">VENDA</span></td><td class="num">76,239</td><td class="num hide-sm">R$ 41.19</td><td class="num strong">R$ 3.1 mi</td></tr></tbody></table>
+  </div>
+  <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · 18/06/2026 15:01</span></footer>
+</div></body></html>
