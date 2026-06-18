@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import unicodedata
 from pathlib import Path
 
 import pandas as pd
@@ -67,6 +68,10 @@ def _mes(ym) -> str:                        # "2026-05" -> "mai/26"
 
 def _org(o) -> str:
     return str(o or "—").replace(" ou Vinculado", "").strip() or "—"
+
+
+def _ascii(s) -> str:
+    return unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode().lower()
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +215,7 @@ def _cvm44_section(v: pd.DataFrame) -> tuple[str, dict]:
 
     body = f"""
   <h2>Movimentações CVM 44 <span class="h-meta">Res. 44 art. 11 · VLMO · {_mes(months[0])}–{_mes(months[-1])}</span></h2>
-  <p class="lead">Compras e vendas declaradas por <b>controlador, administradores e tesouraria</b>
+  <p class="lead">Compras e vendas de <b>ações</b> declaradas por <b>controlador, administradores e tesouraria</b>
     (Resolução CVM 44, art. 11), desde o IPO. <b>{len(v)}</b> movimentos · fluxo líquido por mês e o detalhe pregão a pregão. {org_line}</p>
   <div class="card chart-box" style="margin-top:14px">{chart}</div>
   <div class="card" style="margin-top:16px">
@@ -227,6 +232,10 @@ def render(ticker: str) -> str:
     cvm = pd.read_parquet(BASE / "data" / "cvm44.parquet")
     rec = rec[rec["ticker"] == ticker]
     cvm = cvm[cvm["ticker"] == ticker]
+    # CVM 44: só ações (a VLMO também traz "Outros" valores mobiliários — ex.:
+    # debêntures a ~R$1.000 — que não são a ação e distorceriam a análise).
+    if "especie" in cvm:
+        cvm = cvm[cvm["especie"].map(lambda e: _ascii(e).startswith("aco"))]
 
     rec_body, rk = _recompra_section(rec)
     cvm_body, ck = _cvm44_section(cvm)
