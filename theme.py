@@ -49,6 +49,18 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .tbl tr:hover td{background:var(--panel2)}
 .scroll{max-height:540px;overflow-y:auto}
 .scroll .tbl th{position:sticky;top:0;z-index:1}
+.pos{color:var(--buy)} .neg{color:var(--sell)}
+
+/* filtro de valor mobiliário */
+.filterbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 0}
+.filterbar .flbl{font:600 10px/1 'Inter',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-right:4px}
+.fbtn{appearance:none;cursor:pointer;background:var(--panel);color:var(--muted);
+  border:1px solid var(--line);border-radius:6px;padding:7px 13px;
+  font:600 12px 'IBM Plex Mono',monospace;letter-spacing:.02em;transition:.13s}
+.fbtn:hover{color:var(--paper);border-color:var(--accent)}
+.fbtn.active{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.substats{font:500 12.5px 'IBM Plex Mono',monospace;color:var(--muted);margin:12px 2px 0}
+.substats b{color:var(--paper);font-weight:600}
 .tbl .num{text-align:right}
 .tbl .ctr{text-align:center}
 .tbl .strong{font-weight:600}

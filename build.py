@@ -185,45 +185,94 @@ def _recompra_section(rec: pd.DataFrame) -> tuple[str, dict]:
     return body, {"n_prog": n_prog, "total_exec": total_exec}
 
 
-def _cvm44_section(v: pd.DataFrame) -> tuple[str, dict]:
+def _grp(ticker: str, especie) -> str:
+    return ticker if _ascii(especie).startswith("aco") else "Outros"
+
+
+def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
+    import json
     v = v.copy()
     sign = v["direcao"].map({"compra": 1, "venda": -1}).fillna(0)
-    v["_sv"] = v["volume"].fillna(0) * sign
-    net = float(v["_sv"].sum())
+    net = float((v["volume"].fillna(0) * sign).sum())
     vol = float(v["volume"].fillna(0).sum())
-
     months = sorted(v["data_ref"].astype(str).str[:7].unique())
-    by_m = v.assign(_m=v["data_ref"].astype(str).str[:7]).groupby("_m")["_sv"].sum()
-    chart = _monthly_svg(months, [round(by_m.get(m, 0) / 1e6, 1) for m in months])
 
-    rows = []
-    vv = v.copy()
-    vv["_dm"] = vv.get("data_mov").fillna(vv["data_ref"]).astype(str)
-    for _, r in vv.sort_values("_dm", ascending=False).iterrows():
-        d = r["direcao"]
-        cls = "b-compra" if d == "compra" else "b-venda"
-        rows.append(
-            f'<tr><td class="muted">{_data(r["_dm"])}</td>'
-            f'<td>{_org(r.get("orgao"))}</td>'
-            f'<td><span class="badge {cls}">{"COMPRA" if d=="compra" else "VENDA"}</span></td>'
-            f'<td class="num">{_qtd(r.get("quantidade"))}</td>'
-            f'<td class="num hide-sm">{_preco(r.get("preco"))}</td>'
-            f'<td class="num strong">{_brl(r.get("volume"))}</td></tr>')
+    v["_dm"] = v.get("data_mov").fillna(v["data_ref"]).astype(str)
+    payload = json.dumps([
+        dict(dm=r["_dm"][:10], ym=str(r["data_ref"])[:7], org=_org(r.get("orgao")),
+             dir=r["direcao"],
+             qty=None if _na(r.get("quantidade")) else float(r["quantidade"]),
+             preco=None if _na(r.get("preco")) else float(r["preco"]),
+             vol=None if _na(r.get("volume")) else float(r["volume"]),
+             grp=_grp(ticker, r.get("especie")))
+        for _, r in v.iterrows()], ensure_ascii=False)
 
-    by_org = v.assign(_o=v["orgao"].map(_org)).groupby("_o")["_sv"].sum().sort_values(key=abs, ascending=False)
-    org_line = " · ".join(f'{o}: <b>{_brl(s, True)}</b>' for o, s in by_org.items())
-
+    n_out = int((v["especie"].map(lambda e: not _ascii(e).startswith("aco"))).sum())
     body = f"""
   <h2>Movimentações CVM 44 <span class="h-meta">Res. 44 art. 11 · VLMO · {_mes(months[0])}–{_mes(months[-1])}</span></h2>
-  <p class="lead">Compras e vendas de <b>ações</b> declaradas por <b>controlador, administradores e tesouraria</b>
-    (Resolução CVM 44, art. 11), desde o IPO. <b>{len(v)}</b> movimentos · fluxo líquido por mês e o detalhe pregão a pregão. {org_line}</p>
-  <div class="card chart-box" style="margin-top:14px">{chart}</div>
-  <div class="card" style="margin-top:16px">
-    <div class="scroll"><table class="tbl"><thead><tr><th>Negócio</th><th>Órgão</th><th>Operação</th>
-      <th class="num">Qtde</th><th class="num hide-sm">Preço</th><th class="num">Valor</th></tr></thead>
-      <tbody>{''.join(rows) or '<tr><td colspan=6 class=muted>Sem movimentações.</td></tr>'}</tbody></table></div>
-  </div>"""
+  <p class="lead">Compras e vendas declaradas por <b>controlador, administradores e tesouraria</b>
+    (Resolução CVM 44, art. 11), desde o IPO. A VLMO traz a ação <b>{ticker}</b> e
+    <b>outros valores mobiliários</b> ({n_out} registros) — use o filtro para separar.</p>
+  <div class="filterbar">
+    <span class="flbl">Valor mobiliário</span>
+    <button class="fbtn active" data-g="todos">Todos</button>
+    <button class="fbtn" data-g="{ticker}">{ticker} · ações</button>
+    <button class="fbtn" data-g="Outros">Outros</button>
+  </div>
+  <div class="card chart-box" style="margin-top:12px"><div id="cvm-chart"></div></div>
+  <div class="substats" id="cvm-stats"></div>
+  <div class="card" style="margin-top:14px">
+    <div class="scroll"><table class="tbl"><thead><tr><th>Negócio</th><th>Órgão</th>
+      <th class="hide-sm">Papel</th><th>Operação</th><th class="num">Qtde</th>
+      <th class="num hide-sm">Preço</th><th class="num">Valor</th></tr></thead>
+      <tbody id="cvm-rows"></tbody></table></div>
+  </div>
+{_CVM_JS.replace("__CVMDATA__", payload)}"""
     return body, {"net": net, "vol": vol, "n": len(v)}
+
+
+# JS do filtro CVM 44 (string normal, não f-string — recalcula gráfico/stats/tabela)
+_CVM_JS = r"""<script>(()=>{
+  const DATA = __CVMDATA__;
+  const MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const fmtN=n=>n==null||isNaN(n)?'—':Math.abs(n).toLocaleString('en-US');
+  const fmtP=v=>v==null||isNaN(v)?'—':'R$ '+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtD=s=>s&&s.length>=10?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
+  const fmtBRL=(v,sg)=>{if(v==null||isNaN(v))return '—';const a=Math.abs(v);let s=
+    a>=1e9?'R$ '+(v/1e9).toFixed(2)+' bi':a>=1e6?'R$ '+(v/1e6).toFixed(1)+' mi':
+    a>=1e3?'R$ '+Math.round(v/1e3).toLocaleString('en-US')+' mil':'R$ '+Math.round(v).toLocaleString('en-US');
+    return (sg&&v>0?'+':'')+s;};
+  function chart(rows){
+    const bym={}; rows.forEach(r=>{const s=r.dir==='compra'?1:-1; bym[r.ym]=(bym[r.ym]||0)+s*(r.vol||0);});
+    const months=Object.keys(bym).sort(), vals=months.map(m=>bym[m]/1e6), n=months.length;
+    if(!n) return '<div class="lead" style="padding:14px">Sem movimentações neste filtro.</div>';
+    const W=720,H=240,padL=8,padR=8,padT=20,padB=30,plotW=W-padL-padR,plotH=H-padT-padB,y0=padT+plotH/2;
+    const maxabs=Math.max(1,...vals.map(Math.abs)),sc=(plotH/2-12)/maxabs,slot=plotW/n,bw=Math.min(40,slot*0.62),showV=n<=16;
+    let s=`<svg viewBox="0 0 ${W} ${H}" role="img"><line class="svg-zero" x1="${padL}" y1="${y0}" x2="${W-padR}" y2="${y0}"/>`,py=null;
+    for(let i=0;i<n;i++){const v=vals[i],xc=padL+slot*i+slot/2,h=Math.abs(v)*sc,y=v>=0?y0-h:y0;
+      s+=`<rect x="${(xc-bw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h,0.6).toFixed(1)}" rx="2" fill="${v>=0?'var(--buy)':'var(--sell)'}"/>`;
+      if(showV){const vy=v>=0?y-5:y+h+12;s+=`<text class="svg-val" x="${xc.toFixed(1)}" y="${vy.toFixed(1)}" text-anchor="middle">${(v>0?'+':'')+v.toFixed(0)}</text>`;}
+      const yr=months[i].slice(0,4); if(yr!==py){s+=`<line class="svg-zero" x1="${(xc-slot/2).toFixed(1)}" y1="${padT}" x2="${(xc-slot/2).toFixed(1)}" y2="${H-padB}" opacity="0.35"/><text class="svg-axis" x="${(xc-slot/2+3).toFixed(1)}" y="${H-10}">${yr}</text>`;py=yr;}}
+    return s+`<text class="svg-bm" x="${padL}" y="${padT-7}">compra líq. (+) · R$ mi</text></svg>`;
+  }
+  function render(g){
+    const rows=g==='todos'?DATA:DATA.filter(r=>r.grp===g);
+    document.getElementById('cvm-chart').innerHTML=chart(rows);
+    let net=0,vol=0; const byo={};
+    rows.forEach(r=>{const s=r.dir==='compra'?1:-1;net+=s*(r.vol||0);vol+=(r.vol||0);byo[r.org]=(byo[r.org]||0)+s*(r.vol||0);});
+    const orgs=Object.entries(byo).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([o,s])=>o+': <b>'+fmtBRL(s,true)+'</b>').join(' · ');
+    document.getElementById('cvm-stats').innerHTML=`<b>${rows.length}</b> movimentos · líquido <b class="${net>=0?'pos':'neg'}">${fmtBRL(net,true)}</b> · volume <b>${fmtBRL(vol)}</b>${orgs?' · '+orgs:''}`;
+    document.getElementById('cvm-rows').innerHTML=rows.slice().sort((a,b)=>(b.dm||'').localeCompare(a.dm||'')).map(r=>{
+      const cls=r.dir==='compra'?'b-compra':'b-venda';
+      return `<tr><td class="muted">${fmtD(r.dm)}</td><td>${r.org}</td><td class="muted hide-sm">${r.grp}</td>`+
+        `<td><span class="badge ${cls}">${r.dir==='compra'?'COMPRA':'VENDA'}</span></td>`+
+        `<td class="num">${fmtN(r.qty)}</td><td class="num hide-sm">${fmtP(r.preco)}</td><td class="num strong">${fmtBRL(r.vol)}</td></tr>`;
+    }).join('')||'<tr><td colspan=7 class=muted>Sem movimentações neste filtro.</td></tr>';
+    document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.g===g));
+  }
+  document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>render(b.dataset.g)));
+  render('todos');
+})();</script>"""
 
 
 def render(ticker: str) -> str:
@@ -232,13 +281,9 @@ def render(ticker: str) -> str:
     cvm = pd.read_parquet(BASE / "data" / "cvm44.parquet")
     rec = rec[rec["ticker"] == ticker]
     cvm = cvm[cvm["ticker"] == ticker]
-    # CVM 44: só ações (a VLMO também traz "Outros" valores mobiliários — ex.:
-    # debêntures a ~R$1.000 — que não são a ação e distorceriam a análise).
-    if "especie" in cvm:
-        cvm = cvm[cvm["especie"].map(lambda e: _ascii(e).startswith("aco"))]
 
     rec_body, rk = _recompra_section(rec)
-    cvm_body, ck = _cvm44_section(cvm)
+    cvm_body, ck = _cvm44_section(cvm, ticker)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
 
     kpis = f"""
