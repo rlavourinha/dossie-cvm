@@ -61,6 +61,13 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .fbtn.active{color:var(--bg);background:var(--accent);border-color:var(--accent)}
 .substats{font:500 12.5px 'IBM Plex Mono',monospace;color:var(--muted);margin:12px 2px 0}
 .substats b{color:var(--paper);font-weight:600}
+
+/* execução por programa */
+.prog-grid{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.prog-card{padding:0}
+.prog-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding:13px 18px 0}
+.prog-n{font:600 13px 'IBM Plex Mono',monospace;color:var(--accent)}
+.prog-h .muted{font:500 11.5px 'IBM Plex Mono',monospace}
 .tbl .num{text-align:right}
 .tbl .ctr{text-align:center}
 .tbl .strong{font-weight:600}

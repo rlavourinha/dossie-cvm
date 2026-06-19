@@ -117,6 +117,99 @@ def _monthly_svg(months, values) -> str:
 # ---------------------------------------------------------------------------
 # render
 # ---------------------------------------------------------------------------
+def _date_obj(s):
+    try:
+        return dt.date.fromisoformat(str(s)[:10])
+    except Exception:
+        return None
+
+
+def _programs(rec: pd.DataFrame) -> list[dict]:
+    """Programas de recompra (início, prazo final, autorizado, executado).
+    A execução é reportada num doc posterior; cada programa fica com a execução
+    cujo registro cai entre o seu início e o início do programa seguinte."""
+    rec = rec.copy()
+    rec["_d"] = rec.get("data_aprovacao")
+    rec["_d"] = rec["_d"].fillna(rec.get("data_entrega")).fillna("").astype(str)
+    apr = rec[rec["tipo"] == "aprovacao"].copy()
+    apr["_k"] = apr.apply(lambda r: f'{None if _na(r.get("qtd_autorizada")) else int(r["qtd_autorizada"])}|{r["_d"][:7]}', axis=1)
+    apr = apr.sort_values("_d").drop_duplicates("_k")
+    progs = []
+    for _, r in apr.iterrows():
+        start = _date_obj(r["_d"])
+        if start is None or _na(r.get("qtd_autorizada")):
+            continue
+        prazo = int(r["prazo_meses"]) if not _na(r.get("prazo_meses")) else 12
+        progs.append(dict(start=start, deadline=start + dt.timedelta(days=round(prazo * 30.44)),
+                          auth=float(r["qtd_autorizada"]), prazo=prazo, exec=None, exec_date=None))
+    progs.sort(key=lambda p: p["start"])
+    # execuções (dedup por valor+mês)
+    ex = rec[rec.get("qtd_executada").fillna(0) > 0].copy()
+    seen, execs = set(), []
+    for _, e in ex.sort_values("_d").iterrows():
+        d, q = _date_obj(e["_d"]), float(e["qtd_executada"])
+        k = (round(q), str(e["_d"])[:7])
+        if d is None or k in seen:
+            continue
+        seen.add(k); execs.append((d, q))
+    for i, p in enumerate(progs):
+        hi = progs[i + 1]["start"] if i + 1 < len(progs) else dt.date(2100, 1, 1)
+        cand = [(d, q) for d, q in execs if p["start"] < d <= hi]
+        if cand:
+            p["exec_date"], p["exec"] = max(cand, key=lambda t: t[0])
+    return progs
+
+
+def _prog_panel(p: dict, idx: int) -> str:
+    W, H = 720, 150
+    padL, padR, padT, padB = 46, 120, 16, 30
+    ybot, ytop = H - padB, padT
+    span = max((p["deadline"] - p["start"]).days, 1)
+    x = lambda d: padL + (d - p["start"]).days / span * (W - padL - padR)
+    y = lambda q: ybot - (q / p["auth"]) * (ybot - ytop) if p["auth"] else ybot
+    s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Execução do programa {idx}">']
+    # eixo base
+    s.append(f'<line class="svg-zero" x1="{padL}" y1="{ybot}" x2="{x(p["deadline"]):.1f}" y2="{ybot}"/>')
+    # rampa de execução (esquemática até o total, no exec_date)
+    if p["exec"] and p["exec_date"]:
+        xe, ye = x(p["exec_date"]), y(p["exec"])
+        s.append(f'<polygon points="{padL},{ybot} {xe:.1f},{ye:.1f} {xe:.1f},{ybot}" fill="rgba(70,185,138,.18)"/>')
+        s.append(f'<polyline points="{padL},{ybot} {xe:.1f},{ye:.1f}" fill="none" stroke="var(--buy)" stroke-width="2.2"/>')
+        s.append(f'<circle cx="{xe:.1f}" cy="{ye:.1f}" r="3.5" fill="var(--buy)"/>')
+        pct = 100 * p["exec"] / p["auth"] if p["auth"] else 0
+        s.append(f'<text class="svg-tkr" x="{xe+6:.1f}" y="{ye+4:.1f}">{_qtd(p["exec"])} · {pct:.0f}%</text>')
+    # linha do MÁXIMO autorizado (teto)
+    s.append(f'<line x1="{padL}" y1="{ytop:.1f}" x2="{x(p["deadline"]):.1f}" y2="{ytop:.1f}" stroke="var(--gold)" stroke-width="1.3" stroke-dasharray="5 4"/>')
+    s.append(f'<text class="svg-val" x="{x(p["deadline"])+6:.1f}" y="{ytop+4:.1f}" fill="var(--gold)">máx {_qtd(p["auth"])}</text>')
+    # linha vertical do PRAZO FINAL
+    s.append(f'<line x1="{x(p["deadline"]):.1f}" y1="{ytop-6:.1f}" x2="{x(p["deadline"]):.1f}" y2="{ybot+4:.1f}" stroke="var(--sell)" stroke-width="1.2" stroke-dasharray="4 4"/>')
+    s.append(f'<text class="svg-axis" x="{x(p["deadline"]):.1f}" y="{ybot+18:.1f}" text-anchor="middle" fill="var(--sell)">prazo {_data(p["deadline"].isoformat())}</text>')
+    # eixo y: 0 e máx
+    s.append(f'<text class="svg-axis" x="{padL-7}" y="{ybot+4:.1f}" text-anchor="end">0</text>')
+    s.append(f'<text class="svg-axis" x="{padL-7}" y="{ytop+4:.1f}" text-anchor="end">{p["auth"]/1e6:.0f}M</text>')
+    s.append(f'<text class="svg-axis" x="{padL}" y="{ybot+18:.1f}" text-anchor="middle">{_data(p["start"].isoformat())}</text>')
+    s.append("</svg>")
+    return "".join(s)
+
+
+def _prog_exec_section(rec: pd.DataFrame) -> str:
+    progs = _programs(rec)
+    if not progs:
+        return ""
+    panels = []
+    for i, p in enumerate(progs, 1):
+        head = (f'<div class="prog-h"><span class="prog-n">Programa {i}</span>'
+                f'<span class="muted">{_data(p["start"].isoformat())} → {_data(p["deadline"].isoformat())} · '
+                f'{p["prazo"]} meses · autorizado {_qtd(p["auth"])}</span></div>')
+        panels.append(f'<div class="card prog-card">{head}<div class="chart-box">{_prog_panel(p, i)}</div></div>')
+    return f"""
+  <h2>Execução por programa <span class="h-meta">executado × máximo autorizado × prazo</span></h2>
+  <p class="lead">Cada programa: a <b>rampa verde</b> sobe até a quantidade <b>efetivamente recomprada</b>,
+    a <b>linha dourada</b> é o <b>máximo autorizado</b> e a <b>vertical vermelha</b> marca o <b>prazo final</b>.
+    Só há o <b>total</b> executado por programa (a CVM não divulga o ritmo intra-programa), então a rampa é esquemática até o ponto reportado.</p>
+  <div class="prog-grid">{''.join(panels)}</div>"""
+
+
 def _recompra_section(rec: pd.DataFrame) -> tuple[str, dict]:
     rec = rec.copy()
     rec["_d"] = rec.get("data_aprovacao")
@@ -283,6 +376,7 @@ def render(ticker: str) -> str:
     cvm = cvm[cvm["ticker"] == ticker]
 
     rec_body, rk = _recompra_section(rec)
+    prog_body = _prog_exec_section(rec)
     cvm_body, ck = _cvm44_section(cvm, ticker)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -305,6 +399,7 @@ def render(ticker: str) -> str:
   </header>
   {kpis}
   {rec_body}
+  {prog_body}
   {cvm_body}
   <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · {gerado}</span></footer>
 </div></body></html>"""
