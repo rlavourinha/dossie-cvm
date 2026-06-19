@@ -124,7 +124,23 @@ def _date_obj(s):
         return None
 
 
-def _programs(rec: pd.DataFrame) -> list[dict]:
+def _daily_buys(ticker: str) -> list[tuple]:
+    """Compras diárias da tesouraria (execução real da recompra), validadas por
+    saldo. (data_obj, quantidade, preco). Vazio se o arquivo não existir."""
+    f = BASE / "data" / "recompra_diaria.parquet"
+    if not f.exists():
+        return []
+    d = pd.read_parquet(f)
+    d = d[(d["ticker"] == ticker) & (d["operacao"] == "compra")]
+    out = []
+    for _, r in d.iterrows():
+        do = _date_obj(r["data"])
+        if do is not None:
+            out.append((do, float(r["quantidade"]), float(r.get("preco")) if not _na(r.get("preco")) else None))
+    return sorted(out)
+
+
+def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
     """Programas de recompra (início, prazo final, autorizado, executado).
     A execução é reportada num doc posterior; cada programa fica com a execução
     cujo registro cai entre o seu início e o início do programa seguinte."""
@@ -157,6 +173,24 @@ def _programs(rec: pd.DataFrame) -> list[dict]:
         cand = [(d, q) for d, q in execs if p["start"] < d <= hi]
         if cand:
             p["exec_date"], p["exec"] = max(cand, key=lambda t: t[0])
+    # anexa as compras DIÁRIAS (execução real) a cada programa: a compra cai no
+    # programa ativo na sua data (último iniciado antes dela).
+    daily = _daily_buys(ticker)
+    for d, q, pr in daily:
+        ativo = [p for p in progs if p["start"] <= d < (progs[progs.index(p) + 1]["start"] if progs.index(p) + 1 < len(progs) else dt.date(2100, 1, 1))]
+        if ativo:
+            ativo[-1].setdefault("buys", []).append((d, q, pr))
+    for p in progs:
+        b = sorted(p.get("buys", []))
+        cum, acc = [], 0.0
+        for d, q, pr in b:
+            acc += q
+            cum.append((d, acc))
+        p["cum"] = cum
+        p["exec_real"] = acc if cum else None
+        vol = sum(q * pr for d, q, pr in b if pr)
+        qty = sum(q for d, q, pr in b if pr)
+        p["preco_med"] = vol / qty if qty else None
     return progs
 
 
@@ -170,14 +204,31 @@ def _prog_panel(p: dict, idx: int) -> str:
     s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Execução do programa {idx}">']
     # eixo base
     s.append(f'<line class="svg-zero" x1="{padL}" y1="{ybot}" x2="{x(p["deadline"]):.1f}" y2="{ybot}"/>')
-    # rampa de execução (esquemática até o total, no exec_date)
-    if p["exec"] and p["exec_date"]:
+    # execução: curva REAL (compras diárias acumuladas) ou rampa esquemática
+    cum = p.get("cum")
+    if cum:
+        pts = [(padL, ybot)] + [(x(d), y(c)) for d, c in cum]
+        xe, ye = pts[-1]
+        last = cum[-1][1]
+        poly = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
+        s.append(f'<polygon points="{padL},{ybot} {poly} {xe:.1f},{ybot}" fill="rgba(70,185,138,.16)"/>')
+        s.append(f'<polyline points="{poly}" fill="none" stroke="var(--buy)" stroke-width="2"/>')
+        for px, py in pts[1:]:
+            s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="2.2" fill="var(--buy)"/>')
+        pct = 100 * last / p["auth"] if p["auth"] else 0
+        s.append(f'<text class="svg-tkr" x="{xe+6:.1f}" y="{ye+4:.1f}">{_qtd(last)} · {pct:.0f}%</text>')
+    elif p["exec"] and p["exec_date"]:
         xe, ye = x(p["exec_date"]), y(p["exec"])
         s.append(f'<polygon points="{padL},{ybot} {xe:.1f},{ye:.1f} {xe:.1f},{ybot}" fill="rgba(70,185,138,.18)"/>')
-        s.append(f'<polyline points="{padL},{ybot} {xe:.1f},{ye:.1f}" fill="none" stroke="var(--buy)" stroke-width="2.2"/>')
+        s.append(f'<polyline points="{padL},{ybot} {xe:.1f},{ye:.1f}" fill="none" stroke="var(--buy)" stroke-width="2.2" stroke-dasharray="4 3"/>')
         s.append(f'<circle cx="{xe:.1f}" cy="{ye:.1f}" r="3.5" fill="var(--buy)"/>')
         pct = 100 * p["exec"] / p["auth"] if p["auth"] else 0
-        s.append(f'<text class="svg-tkr" x="{xe+6:.1f}" y="{ye+4:.1f}">{_qtd(p["exec"])} · {pct:.0f}%</text>')
+        s.append(f'<text class="svg-tkr" x="{xe+6:.1f}" y="{ye+4:.1f}">{_qtd(p["exec"])} · {pct:.0f}% (total)</text>')
+    # total OFICIAL (encerramento) como referência, quando difere do diário validado
+    if cum and p.get("exec") and abs(p["exec"] - p.get("exec_real", 0)) > 0.02 * p["auth"]:
+        yo = y(p["exec"])
+        s.append(f'<line x1="{padL}" y1="{yo:.1f}" x2="{x(p["deadline"]):.1f}" y2="{yo:.1f}" stroke="var(--buy)" stroke-width="1" stroke-dasharray="2 3" opacity=".6"/>')
+        s.append(f'<text class="svg-val" x="{x(p["deadline"])+6:.1f}" y="{yo+4:.1f}" fill="var(--buy)">oficial {_qtd(p["exec"])}</text>')
     # linha do MÁXIMO autorizado (teto)
     s.append(f'<line x1="{padL}" y1="{ytop:.1f}" x2="{x(p["deadline"]):.1f}" y2="{ytop:.1f}" stroke="var(--gold)" stroke-width="1.3" stroke-dasharray="5 4"/>')
     s.append(f'<text class="svg-val" x="{x(p["deadline"])+6:.1f}" y="{ytop+4:.1f}" fill="var(--gold)">máx {_qtd(p["auth"])}</text>')
@@ -192,21 +243,25 @@ def _prog_panel(p: dict, idx: int) -> str:
     return "".join(s)
 
 
-def _prog_exec_section(rec: pd.DataFrame) -> str:
-    progs = _programs(rec)
+def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
+    progs = _programs(rec, ticker)
     if not progs:
         return ""
+    has_daily = any(p.get("cum") for p in progs)
     panels = []
     for i, p in enumerate(progs, 1):
+        pm = f' · preço médio {_preco(p["preco_med"])}' if p.get("preco_med") else ""
         head = (f'<div class="prog-h"><span class="prog-n">Programa {i}</span>'
                 f'<span class="muted">{_data(p["start"].isoformat())} → {_data(p["deadline"].isoformat())} · '
-                f'{p["prazo"]} meses · autorizado {_qtd(p["auth"])}</span></div>')
+                f'{p["prazo"]} meses · autorizado {_qtd(p["auth"])}{pm}</span></div>')
         panels.append(f'<div class="card prog-card">{head}<div class="chart-box">{_prog_panel(p, i)}</div></div>')
+    nota = ("a <b>curva verde</b> é a <b>execução diária real</b> da tesouraria (compras validadas pelo saldo dos "
+            "formulários mensais do VLMO)" if has_daily else
+            "a <b>rampa verde</b> sobe até o total recomprado (a CVM divulga só o total por programa)")
     return f"""
   <h2>Execução por programa <span class="h-meta">executado × máximo autorizado × prazo</span></h2>
-  <p class="lead">Cada programa: a <b>rampa verde</b> sobe até a quantidade <b>efetivamente recomprada</b>,
-    a <b>linha dourada</b> é o <b>máximo autorizado</b> e a <b>vertical vermelha</b> marca o <b>prazo final</b>.
-    Só há o <b>total</b> executado por programa (a CVM não divulga o ritmo intra-programa), então a rampa é esquemática até o ponto reportado.</p>
+  <p class="lead">Cada programa: {nota}, a <b>linha dourada</b> é o <b>máximo autorizado</b>
+    e a <b>vertical vermelha</b> marca o <b>prazo final</b>.</p>
   <div class="prog-grid">{''.join(panels)}</div>"""
 
 
@@ -376,7 +431,7 @@ def render(ticker: str) -> str:
     cvm = cvm[cvm["ticker"] == ticker]
 
     rec_body, rk = _recompra_section(rec)
-    prog_body = _prog_exec_section(rec)
+    prog_body = _prog_exec_section(rec, ticker)
     cvm_body, ck = _cvm44_section(cvm, ticker)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
 
