@@ -41,8 +41,13 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 
 /* cartão / tabela */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;overflow:hidden}
-.chart-box{padding:16px 18px 8px}
+.chart-box{padding:16px 18px 8px;position:relative}
 .chart-box svg{width:100%;height:auto;display:block}
+.zoomable{cursor:grab;touch-action:none}
+.zoomable:active{cursor:grabbing}
+.zoom-hint{position:absolute;right:22px;top:10px;font:500 10px 'IBM Plex Mono',monospace;
+  color:var(--faint);pointer-events:none;opacity:.75}
+.zoom-hint b{color:var(--muted)}
 .svg-zero{stroke:var(--faint);stroke-width:1}
 .svg-tkr{fill:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600}
 .svg-val{fill:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px}

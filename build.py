@@ -880,7 +880,7 @@ def _timing_section(ticker: str) -> str:
     y = lambda p: yb - (p - ymin) / (ymax - ymin) * (yb - yt)
     maxvol = max((max((p * q for _, p, q in g["pts"]), default=0) for g in groups.values()), default=1) or 1
 
-    s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Compras por grupo vs preço">']
+    s = [f'<svg id="tim-svg" class="zoomable" viewBox="0 0 {W} {H}" role="img" aria-label="Compras por grupo vs preço">']
     # grade de preço (horizontais)
     step = 10
     pl = ymin
@@ -937,8 +937,34 @@ def _timing_section(ticker: str) -> str:
     <b>preço médio</b> de cada grupo. Quanto mais baixo na curva e mais à esquerda dos picos, mais o grupo
     <b>aproveita as quedas</b>. O percentil mostra em quantos pregões da janela o papel esteve <i>mais barato</i>
     que o preço médio pago.</p>
-  <div class="card"><div class="chart-box">{''.join(s)}</div>
-    <div class="tim-leg">{''.join(leg)}</div></div>"""
+  <div class="card"><div class="chart-box">{''.join(s)}
+    <div class="zoom-hint">role para dar <b>zoom</b> · arraste para mover · 2 cliques reseta</div></div>
+    <div class="tim-leg">{''.join(leg)}</div></div>
+{_ZOOM_JS.replace("__ID__", "tim-svg")}"""
+
+
+_ZOOM_JS = r"""<script>(()=>{
+  const svg=document.getElementById('__ID__'); if(!svg) return;
+  const b=svg.viewBox.baseVal, O={x:b.x,y:b.y,w:b.width,h:b.height};
+  const V={...O};
+  const apply=()=>svg.setAttribute('viewBox',`${V.x} ${V.y} ${V.w} ${V.h}`);
+  const clamp=()=>{V.w=Math.min(V.w,O.w);V.h=Math.min(V.h,O.h);
+    V.x=Math.max(O.x,Math.min(V.x,O.x+O.w-V.w));V.y=Math.max(O.y,Math.min(V.y,O.y+O.h-V.h));};
+  const at=e=>{const r=svg.getBoundingClientRect();
+    return {x:V.x+(e.clientX-r.left)/r.width*V.w, y:V.y+(e.clientY-r.top)/r.height*V.h};};
+  svg.addEventListener('wheel',e=>{e.preventDefault();const p=at(e),
+    f=e.deltaY<0?0.84:1/0.84, nw=V.w*f, nh=V.h*f;
+    V.x=p.x-(p.x-V.x)*(nw/V.w); V.y=p.y-(p.y-V.y)*(nh/V.h); V.w=nw; V.h=nh; clamp(); apply();
+  },{passive:false});
+  let d=null;
+  svg.addEventListener('pointerdown',e=>{d={x:e.clientX,y:e.clientY,vx:V.x,vy:V.y};
+    svg.setPointerCapture(e.pointerId); svg.style.cursor='grabbing';});
+  svg.addEventListener('pointermove',e=>{if(!d)return;const r=svg.getBoundingClientRect();
+    V.x=d.vx-(e.clientX-d.x)/r.width*V.w; V.y=d.vy-(e.clientY-d.y)/r.height*V.h; clamp(); apply();});
+  const up=()=>{d=null; svg.style.cursor='';};
+  svg.addEventListener('pointerup',up); svg.addEventListener('pointercancel',up);
+  svg.addEventListener('dblclick',()=>{Object.assign(V,O); apply();});
+})();</script>"""
 
 
 def _treasury_saldo(ticker: str):
