@@ -261,7 +261,9 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
     return f"""
   <h2>Execução por programa <span class="h-meta">executado × máximo autorizado × prazo</span></h2>
   <p class="lead">Cada programa: {nota}, a <b>linha dourada</b> é o <b>máximo autorizado</b>
-    e a <b>vertical vermelha</b> marca o <b>prazo final</b>.</p>
+    e a <b>vertical vermelha</b> marca o <b>prazo final</b>. A linha pontilhada é o
+    <b>total oficial</b> do encerramento; onde a curva diária fica abaixo dela, faltam os
+    <b>formulários de tesouraria ainda não publicados</b> (a referência do mês fecha ~dia 10 do mês seguinte).</p>
   <div class="prog-grid">{''.join(panels)}</div>"""
 
 
