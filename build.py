@@ -376,7 +376,7 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
     ficam em tesouraria até o programa encerrar) e pode estar <b>parcial</b> no mês corrente. A
     <b>linha dourada</b> é o teto de ações, a <b>vertical vermelha</b> a <b>validade</b> nominal e a
     <b>vertical teal</b> o <b>encerramento de fato</b>.</p>
-  <div class="prog-grid">{''.join(panels)}</div>"""
+  <div class="prog-grid">{''.join(reversed(panels))}</div>"""
 
 
 def _doclink(url: str, rotulo: str) -> str:
