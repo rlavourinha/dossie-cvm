@@ -621,6 +621,131 @@ def _indicators_section(cvm: pd.DataFrame, ticker: str) -> str:
     <tbody>{''.join(rows)}</tbody></table></div>"""
 
 
+_GRUPOS_TIMING = [
+    ("Tesouraria", "#46B98A"), ("Controlador", "#D7B45A"),
+    ("Diretores", "#E0714C"), ("Conselho", "#3FA7B5"),
+]
+
+
+def _buy_groups(ticker: str):
+    """Compras (data, preço, qtd) por grupo, só de AÇÕES. Tesouraria vem da
+    recompra diária; Controlador/Diretores/Conselho do CVM 44 à vista. Retorna
+    {grupo: {pts, qtd, vol, avg, pct, d0, d1}} + os preços de mercado (px)."""
+    px = _market_prices(ticker)
+    rd = pd.read_parquet(BASE / "data" / "recompra_diaria.parquet")
+    cv = pd.read_parquet(BASE / "data" / "cvm44.parquet")
+    if "ticker" in rd:
+        rd = rd[rd["ticker"] == ticker]
+    cv = cv[cv["ticker"] == ticker]
+
+    raw = {}
+    t = rd[rd["operacao"] == "compra"]
+    raw["Tesouraria"] = [(_date_obj(str(d)[:10]), float(p), float(q))
+                         for d, p, q in zip(t["data"], t["preco"], t["quantidade"]) if p and p > 0]
+    av = cv[cv["tipo_mov"].fillna("").str.contains("vista|termo", case=False)
+            & (cv["direcao"] == "compra")
+            & cv["especie"].map(lambda e: _ascii(e).startswith("aco"))]
+    for g in ("Controlador", "Diretores", "Conselho"):
+        s = av[av["orgao"].map(lambda o: g in str(o))]
+        raw[g] = [(_date_obj(str(d)[:10]), float(p), float(q))
+                  for d, p, q in zip(s["data_mov"], s["preco"], s["quantidade"]) if p and p > 0]
+
+    out = {}
+    for g, pts in raw.items():
+        pts = [x for x in pts if x[0]]
+        if not pts:
+            continue
+        qtd = sum(q for _, _, q in pts)
+        vol = sum(p * q for _, p, q in pts)
+        avg = vol / qtd if qtd else 0
+        d0, d1 = min(d for d, _, _ in pts), max(d for d, _, _ in pts)
+        pct = None
+        if px is not None:
+            w = px[(px["data"] >= d0) & (px["data"] <= d1)]
+            if len(w) > 5:
+                pct = 100 * float((w["preco"] < avg).mean())
+        out[g] = dict(pts=pts, qtd=qtd, vol=vol, avg=avg, pct=pct, d0=d0, d1=d1)
+    return out, px
+
+
+def _timing_section(ticker: str) -> str:
+    groups, px = _buy_groups(ticker)
+    if px is None or not groups:
+        return ""
+    W, H = 960, 400
+    padL, padR, padT, padB = 46, 18, 18, 34
+    xr, yb, yt = W - padR, H - padB, padT
+    prows = px.sort_values("data")
+    d0, d1 = prows["data"].iloc[0], prows["data"].iloc[-1]
+    span = max((d1 - d0).days, 1)
+    pmin, pmax = float(prows["preco"].min()), float(prows["preco"].max())
+    ymin = math.floor(pmin / 10) * 10
+    ymax = math.ceil(pmax / 10) * 10
+    x = lambda d: padL + (d - d0).days / span * (xr - padL)
+    y = lambda p: yb - (p - ymin) / (ymax - ymin) * (yb - yt)
+    maxvol = max((max((p * q for _, p, q in g["pts"]), default=0) for g in groups.values()), default=1) or 1
+
+    s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Compras por grupo vs preço">']
+    # grade de preço (horizontais)
+    step = 10
+    pl = ymin
+    while pl <= ymax:
+        s.append(f'<line x1="{padL}" y1="{y(pl):.1f}" x2="{xr}" y2="{y(pl):.1f}" stroke="var(--line)" stroke-width="1" opacity=".5"/>')
+        s.append(f'<text class="svg-axis" x="{padL-7}" y="{y(pl)+3:.1f}" text-anchor="end">{pl:.0f}</text>')
+        pl += step
+    # marcadores de ano
+    for yr in range(d0.year + 1, d1.year + 1):
+        xa = x(dt.date(yr, 1, 1))
+        s.append(f'<line x1="{xa:.1f}" y1="{yt}" x2="{xa:.1f}" y2="{yb}" stroke="var(--line)" stroke-width="1" opacity=".35"/>')
+        s.append(f'<text class="svg-axis" x="{xa:.1f}" y="{yb+16:.1f}" text-anchor="middle">{yr}</text>')
+    # linha de preço
+    pts = " ".join(f"{x(d):.1f},{y(p):.1f}" for d, p in zip(prows["data"], prows["preco"]))
+    s.append(f'<polyline points="{pts}" fill="none" stroke="var(--faint)" stroke-width="1.3" opacity=".8"/>')
+    # linhas tracejadas do preço médio (grupos com mais de uma compra)
+    for g, color in _GRUPOS_TIMING:
+        gd = groups.get(g)
+        if gd and len(gd["pts"]) > 2 and ymin <= gd["avg"] <= ymax:
+            s.append(f'<line x1="{padL}" y1="{y(gd["avg"]):.1f}" x2="{xr}" y2="{y(gd["avg"]):.1f}" stroke="{color}" stroke-width="1.1" stroke-dasharray="5 4" opacity=".7"/>')
+    # bolhas de compra
+    for g, color in _GRUPOS_TIMING:
+        gd = groups.get(g)
+        if not gd:
+            continue
+        for d, p, q in sorted(gd["pts"], key=lambda t: -t[1] * t[2]):
+            r = 3 + 12 * math.sqrt((p * q) / maxvol)
+            s.append(f'<circle cx="{x(d):.1f}" cy="{y(p):.1f}" r="{r:.1f}" fill="{color}" fill-opacity=".42" stroke="{color}" stroke-width="1"/>')
+    s.append("</svg>")
+
+    # legenda + estatística
+    leg = []
+    for g, color in _GRUPOS_TIMING:
+        gd = groups.get(g)
+        if not gd:
+            continue
+        if gd["pct"] is not None:
+            barato = 100 - gd["pct"]
+            tom = "tom-baixa" if gd["pct"] <= 40 else "tom-alta" if gd["pct"] >= 55 else "tom-neutro"
+            stat = f'mais barato que <b>{barato:.0f}%</b> dos pregões'
+            tag = '<span class="tim-tag {0}">{1}</span>'.format(
+                tom, "compra na baixa" if gd["pct"] <= 40 else "compra constante" if gd["pct"] >= 55 else "neutro")
+        else:
+            stat, tag = "evento isolado", ""
+        leg.append(
+            f'<div class="tim-row"><span class="tim-dot" style="background:{color}"></span>'
+            f'<span class="tim-g">{g}</span>'
+            f'<span class="tim-st">{_qtd(gd["qtd"])} ações · {_vol(gd["vol"])} · médio <b>{_preco(gd["avg"])}</b> · {stat}</span>{tag}</div>')
+
+    return f"""
+  <h2>Timing de compra × preço <span class="h-meta">quem compra na baixa</span></h2>
+  <p class="lead">Cada <b>bolha</b> é uma compra de ações, posicionada no <b>preço pago</b> e na data, com o
+    <b>tamanho proporcional ao volume</b> (R$); a linha cinza é o preço da {ticker}. As tracejadas marcam o
+    <b>preço médio</b> de cada grupo. Quanto mais baixo na curva e mais à esquerda dos picos, mais o grupo
+    <b>aproveita as quedas</b>. O percentil mostra em quantos pregões da janela o papel esteve <i>mais barato</i>
+    que o preço médio pago.</p>
+  <div class="card"><div class="chart-box">{''.join(s)}</div>
+    <div class="tim-leg">{''.join(leg)}</div></div>"""
+
+
 def render(ticker: str) -> str:
     info = companies.COMPANIES[ticker]
     rec = pd.read_parquet(BASE / "data" / "recompra.parquet")
@@ -632,6 +757,7 @@ def render(ticker: str) -> str:
     prog_body = _prog_exec_section(rec, ticker)
     cvm_body, ck = _cvm44_section(cvm, ticker)
     ind_body = _indicators_section(cvm, ticker)
+    tim_body = _timing_section(ticker)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
 
     kpis = f"""
@@ -656,6 +782,7 @@ def render(ticker: str) -> str:
   {rec_body}
   {prog_body}
   {cvm_body}
+  {tim_body}
   <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · {gerado}</span></footer>
 </div></body></html>"""
 

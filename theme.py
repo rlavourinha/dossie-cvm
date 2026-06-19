@@ -112,6 +112,18 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .b-execucao{color:var(--gold);background:rgba(215,180,90,.14)}
 .b-encerramento,.b-cancelamento{color:var(--muted);border:1px solid var(--line)}
 
+/* timing de compra x preço */
+.tim-leg{padding:12px 18px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:9px}
+.tim-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tim-dot{width:11px;height:11px;border-radius:50%;flex:none}
+.tim-g{font:600 12.5px 'IBM Plex Mono',monospace;color:var(--paper);min-width:96px}
+.tim-st{font:500 12px 'IBM Plex Mono',monospace;color:var(--muted)}
+.tim-st b{color:var(--paper);font-weight:600}
+.tim-tag{font:600 9.5px 'Inter',sans-serif;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:3px;white-space:nowrap;margin-left:auto}
+.tom-baixa{color:var(--buy);background:rgba(70,185,138,.14)}
+.tom-alta{color:var(--gold);background:rgba(215,180,90,.14)}
+.tom-neutro{color:var(--muted);border:1px solid var(--line)}
+
 .lead{color:var(--muted);font-size:13.5px;max-width:760px;margin:8px 0 0}
 .lead b{color:var(--paper);font-weight:500}
 footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex Mono',monospace;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-top:1px solid var(--line);padding-top:16px}
