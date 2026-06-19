@@ -159,7 +159,7 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         progs.append(dict(start=start, deadline=start + dt.timedelta(days=round(prazo * 30.44)),
                           auth=float(r["qtd_autorizada"]), prazo=prazo, exec=None, exec_date=None,
                           valor_auth=(None if _na(r.get("valor_autorizado")) else float(r["valor_autorizado"])),
-                          exec_value=None))
+                          exec_value=None, doc_aprov=(r.get("link") or ""), doc_encer=""))
     progs.sort(key=lambda p: p["start"])
     # encerramento REAL: programas são sequenciais (sem sobreposição); cada um é
     # encerrado quando o próximo abre. O último em aberto não tem data de fim.
@@ -174,13 +174,13 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         k = (round(q), str(e["_d"])[:7])
         if d is None or k in seen:
             continue
-        seen.add(k); execs.append((d, q, v))
+        seen.add(k); execs.append((d, q, v, e.get("link") or ""))
     for i, p in enumerate(progs):
         hi = progs[i + 1]["start"] if i + 1 < len(progs) else dt.date(2100, 1, 1)
-        cand = [(d, q, v) for d, q, v in execs if p["start"] < d <= hi]
+        cand = [(d, q, v, lk) for d, q, v, lk in execs if p["start"] < d <= hi]
         if cand:
-            d, q, v = max(cand, key=lambda t: t[0])
-            p["exec_date"], p["exec"], p["exec_value"] = d, q, v
+            d, q, v, lk = max(cand, key=lambda t: t[0])
+            p["exec_date"], p["exec"], p["exec_value"], p["doc_encer"] = d, q, v, lk
     # anexa as compras DIÁRIAS (execução real) a cada programa: a compra cai no
     # programa ativo na sua data (último iniciado antes dela).
     daily = _daily_buys(ticker)
@@ -326,70 +326,73 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
   <div class="prog-grid">{''.join(panels)}</div>"""
 
 
-def _recompra_section(rec: pd.DataFrame) -> tuple[str, dict]:
-    rec = rec.copy()
-    rec["_d"] = rec.get("data_aprovacao")
-    rec["_d"] = rec["_d"].fillna(rec.get("data_entrega")).fillna("").astype(str)
+def _doclink(url: str, rotulo: str) -> str:
+    return (f'<a href="{url}" target="_blank" rel="noopener">{rotulo} ↗</a>'
+            if url else f'<span class="faint">{rotulo} —</span>')
 
+
+def _recompra_section(rec: pd.DataFrame, ticker: str) -> tuple[str, dict]:
+    progs = _programs(rec, ticker)
+    n_prog = len(progs)
+    total_exec = sum((p.get("exec") or 0) for p in progs if p.get("end"))
+    abertos = [(i, p) for i, p in enumerate(progs, 1) if not p.get("end")]
+    fechados = [(i, p) for i, p in enumerate(progs, 1) if p.get("end")]
+
+    def lim(p):
+        v = f' · até <b>{_vol(p["valor_auth"])}</b>' if p.get("valor_auth") else ""
+        return f'até <b>{_qtd(p["auth"])}</b> ações{v}'
+
+    # --- programa ABERTO: card em destaque ---
+    open_html = ""
+    for i, p in abertos:
+        ex = p.get("exec") or p.get("exec_real")
+        exec_txt = (f'{_qtd(ex)} ações' + (f' · {_vol(p["exec_value"])}' if p.get("exec_value") else "")
+                    ) if ex else "ainda sem execução reportada"
+        open_html += f"""
+  <div class="open-prog">
+    <div class="op-head"><span class="op-tag">Programa {i}</span>
+      <span class="motivo m-open">em andamento</span></div>
+    <div class="op-grid">
+      <div class="opc"><div class="opl">Início</div><div class="opv">{_data(p["start"].isoformat())}</div></div>
+      <div class="opc"><div class="opl">Vencimento</div><div class="opv">{_data(p["deadline"].isoformat())}</div></div>
+      <div class="opc"><div class="opl">Prazo</div><div class="opv">{p["prazo"]} meses</div></div>
+      <div class="opc"><div class="opl">Limite de ações</div><div class="opv">{_qtd(p["auth"])}</div></div>
+      <div class="opc"><div class="opl">Limite de valor</div><div class="opv">{_vol(p["valor_auth"]) or "—"}</div></div>
+      <div class="opc"><div class="opl">Executado</div><div class="opv">{exec_txt}</div></div>
+    </div>
+    <div class="op-foot">{_doclink(p.get("doc_aprov"), "aprovação")}</div>
+  </div>"""
+
+    # --- programas ENCERRADOS: uma linha resumida cada ---
     rows = []
-    seen = set()
-    n_prog = 0
-    total_exec = 0.0
-
-    # Classifica cada doc para exibição. A quantidade EXECUTADA costuma estar no
-    # comunicado de ENCERRAMENTO ("foram adquiridas X ações"), não num tipo
-    # 'execucao' — então qualquer doc com qtd_executada vira "Recompra executada".
-    ev = []
-    for _, r in rec.iterrows():
-        tipo = r["tipo"]
-        if tipo in ("opa", "debenture"):
-            continue  # oferta de aquisição / dívida — não é recompra de ações
-        exec_q = r.get("qtd_executada")
-        has_exec = not _na(exec_q) and exec_q > 0
-        if tipo == "aprovacao":
-            qty, label, cls = r.get("qtd_autorizada"), "Programa aprovado", "b-aprovacao"
-        elif has_exec:
-            qty, label, cls = exec_q, "Recompra executada", "b-execucao"
-        elif tipo == "encerramento":
-            qty, label, cls = None, "Encerramento", "b-encerramento"
-        elif tipo == "cancelamento":
-            qty, label, cls = None, "Cancelamento", "b-cancelamento"
-        else:
-            qty, label, cls = None, "Comunicado", "b-aprovacao"
-        key = (label, None if _na(qty) else int(qty), r["_d"][:7])
-        if key in seen:
-            continue
-        seen.add(key)
-        ev.append((r, label, cls, qty))
-
-    for r, label, cls, qty in sorted(ev, key=lambda e: e[0]["_d"], reverse=True):
-        if label == "Programa aprovado" and not _na(qty):
-            n_prog += 1
-        if label == "Recompra executada" and not _na(qty):
-            total_exec += qty
-        pct = f'{r["pct_float"]:.2f}%' if not _na(r.get("pct_float")) else "—"
-        prazo = f'{int(r["prazo_meses"])}m' if not _na(r.get("prazo_meses")) else "—"
-        pm = r.get("preco_medio_exec")
-        extra = f' · {_preco(pm)} méd' if (label == "Recompra executada" and not _na(pm)) else ""
-        link = r.get("link") or ""
-        doc = f'<a href="{link}" target="_blank" rel="noopener">↗</a>' if link else "—"
+    for i, p in sorted(fechados, key=lambda t: t[1]["start"], reverse=True):
+        ex = p.get("exec") or 0
+        pct = 100 * ex / p["auth"] if p["auth"] else 0
+        rsn = p.get("reason")
+        motivo = f'<span class="motivo m-{rsn[2]}">{rsn[0]}</span>' if rsn else "—"
+        preco_off = (p["exec_value"] / ex) if (p.get("exec_value") and ex) else None
+        execu = (f'{_qtd(ex)} <span class="faint">({pct:.0f}%)</span>'
+                 + (f'<br><span class="ag-sub">{_vol(p["exec_value"])} · {_preco(preco_off)} méd</span>'
+                    if p.get("exec_value") else ""))
+        docs = f'{_doclink(p.get("doc_aprov"), "aprov")} · {_doclink(p.get("doc_encer"), "encerr")}'
         rows.append(
-            f'<tr><td class="muted">{_data(r["_d"])}</td>'
-            f'<td><span class="badge {cls}">{label}</span></td>'
-            f'<td class="num strong">{_qtd(qty)} <span class="faint">ações</span>{extra}</td>'
-            f'<td class="num hide-sm">{pct}</td>'
-            f'<td class="ctr hide-sm">{prazo}</td>'
-            f'<td class="ctr">{doc}</td></tr>')
+            f'<tr><td class="strong">Programa {i}</td>'
+            f'<td class="muted">{_data(p["start"].isoformat())} → {_data(p["end"].isoformat())}</td>'
+            f'<td>{lim(p)}</td>'
+            f'<td class="num strong">{execu}</td>'
+            f'<td>{motivo}</td>'
+            f'<td class="ctr nowrap">{docs}</td></tr>')
 
     body = f"""
   <h2>Recompra de ações <span class="h-meta">programas &amp; execução</span></h2>
-  <p class="lead">Programas de recompra autorizados pelo Conselho e o quanto foi
-    <b>efetivamente recomprado</b> (dos comunicados de conclusão). Quantidade = limite
-    autorizado (programa) ou ações de fato adquiridas (execução).</p>
+  <p class="lead">Programas de recompra autorizados pelo Conselho — datas, limites (ações e valor),
+    prazo e os documentos. O programa <b>em andamento</b> aparece em destaque; os encerrados,
+    resumidos com o <b>quanto foi efetivamente recomprado</b> e o motivo do encerramento.</p>
+  {open_html}
   <div class="card" style="margin-top:14px">
-    <table class="tbl"><thead><tr><th>Data</th><th>Evento</th><th class="num">Quantidade</th>
-      <th class="num hide-sm">% float</th><th class="ctr hide-sm">Prazo</th><th class="ctr">Doc</th></tr></thead>
-      <tbody>{''.join(rows) or '<tr><td colspan=6 class=muted>Sem eventos de recompra.</td></tr>'}</tbody></table>
+    <table class="tbl"><thead><tr><th>Programa</th><th>Período</th><th>Limites</th>
+      <th class="num">Executado</th><th>Encerrou por</th><th class="ctr">Documentos</th></tr></thead>
+      <tbody>{''.join(rows) or '<tr><td colspan=6 class=muted>Sem programas encerrados.</td></tr>'}</tbody></table>
   </div>"""
     return body, {"n_prog": n_prog, "total_exec": total_exec}
 
@@ -572,7 +575,7 @@ def render(ticker: str) -> str:
     rec = rec[rec["ticker"] == ticker]
     cvm = cvm[cvm["ticker"] == ticker]
 
-    rec_body, rk = _recompra_section(rec)
+    rec_body, rk = _recompra_section(rec, ticker)
     prog_body = _prog_exec_section(rec, ticker)
     cvm_body, ck = _cvm44_section(cvm, ticker)
     ind_body = _indicators_section(cvm, ticker)

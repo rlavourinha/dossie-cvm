@@ -73,6 +73,19 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .substats{font:500 12.5px 'IBM Plex Mono',monospace;color:var(--muted);margin:12px 2px 0}
 .substats b{color:var(--paper);font-weight:600}
 
+/* programa de recompra em andamento (destaque) */
+.open-prog{margin-top:14px;border:1px solid var(--accent);border-radius:9px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(63,167,181,.10),rgba(63,167,181,.02))}
+.op-head{display:flex;align-items:center;gap:11px;padding:14px 18px 0}
+.op-tag{font:600 14px 'Fraunces',serif;color:var(--paper)}
+.op-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin:14px 0 0;border-top:1px solid var(--line)}
+.opc{padding:13px 18px;border-right:1px solid var(--line)}.opc:last-child{border-right:0}
+.opl{font:600 9.5px 'Inter',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+.opv{font:600 15px 'IBM Plex Mono',monospace;color:var(--paper)}
+.op-foot{padding:11px 18px;border-top:1px solid var(--line);font:500 12px 'IBM Plex Mono',monospace}
+.nowrap{white-space:nowrap}
+@media (max-width:760px){.op-grid{grid-template-columns:repeat(2,1fr)}.opc:nth-child(2n){border-right:0}}
+
 /* execução por programa */
 .prog-grid{display:flex;flex-direction:column;gap:14px;margin-top:14px}
 .prog-card{padding:0}
@@ -113,7 +126,7 @@ footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex
     <h1>Rede D'Or São Luiz · <span class="tk">RDOR3</span></h1>
     <div class="sub"><span>Saúde · Hospitais</span>·
       <span>CNPJ <b>06.047.087/0001-39</b></span>·
-      <span>Gerado em <b>19/06/2026 15:17</b></span><span class="chip">v1 · RDOR3</span></div>
+      <span>Gerado em <b>19/06/2026 15:25</b></span><span class="chip">v1 · RDOR3</span></div>
   </header>
   
   <section class="kpis">
@@ -132,13 +145,27 @@ footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex
     <tbody><tr><td class="strong">Tesouraria<br><span class="ag-sub">recompra</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="ind-c" title="7,109,000 ações">▲ R$ 287 mi</span></td><td class="num"><span class="ind-c" title="7,109,000 ações">▲ R$ 287 mi</span></td><td class="num"><span class="ind-c" title="7,109,000 ações">▲ R$ 287 mi</span></td></tr><tr><td class="strong">Controlador<br><span class="ag-sub">acionista controlador</span></td><td class="num"><span class="ind-c" title="3,460,541 ações">▲ R$ 119 mi</span></td><td class="num"><span class="ind-c" title="34,604,741 ações">▲ R$ 1.28 bi</span></td><td class="num"><span class="ind-c" title="34,604,741 ações">▲ R$ 1.28 bi</span></td><td class="num"><span class="ind-c" title="34,604,741 ações">▲ R$ 1.28 bi</span></td></tr><tr><td class="strong">Diretores<br><span class="ag-sub">diretoria</span></td><td class="num"><span class="ind-c" title="941 ações">▲ R$ 1 mi</span></td><td class="num"><span class="ind-c" title="941 ações">▲ R$ 1 mi</span><br><span class="ind-v" title="157,000 ações">▼ R$ 7 mi</span></td><td class="num"><span class="ind-c" title="941 ações">▲ R$ 1 mi</span><br><span class="ind-v" title="157,000 ações">▼ R$ 7 mi</span></td><td class="num"><span class="ind-c" title="1,350 ações">▲ R$ 1 mi</span><br><span class="ind-v" title="1,572,314 ações">▼ R$ 72 mi</span></td></tr><tr><td class="strong">Conselho<br><span class="ag-sub">conselho de adm.</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="faint">—</span></td></tr></tbody></table></div>
   
   <h2>Recompra de ações <span class="h-meta">programas &amp; execução</span></h2>
-  <p class="lead">Programas de recompra autorizados pelo Conselho e o quanto foi
-    <b>efetivamente recomprado</b> (dos comunicados de conclusão). Quantidade = limite
-    autorizado (programa) ou ações de fato adquiridas (execução).</p>
+  <p class="lead">Programas de recompra autorizados pelo Conselho — datas, limites (ações e valor),
+    prazo e os documentos. O programa <b>em andamento</b> aparece em destaque; os encerrados,
+    resumidos com o <b>quanto foi efetivamente recomprado</b> e o motivo do encerramento.</p>
+  
+  <div class="open-prog">
+    <div class="op-head"><span class="op-tag">Programa 4</span>
+      <span class="motivo m-open">em andamento</span></div>
+    <div class="op-grid">
+      <div class="opc"><div class="opl">Início</div><div class="opv">10/06/2026</div></div>
+      <div class="opc"><div class="opl">Vencimento</div><div class="opv">10/06/2027</div></div>
+      <div class="opc"><div class="opl">Prazo</div><div class="opv">12 meses</div></div>
+      <div class="opc"><div class="opl">Limite de ações</div><div class="opv">30,000,000</div></div>
+      <div class="opc"><div class="opl">Limite de valor</div><div class="opv">R$ 1.00 bi</div></div>
+      <div class="opc"><div class="opl">Executado</div><div class="opv">ainda sem execução reportada</div></div>
+    </div>
+    <div class="op-foot"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1533439&numSequencia=1058145&numVersao=1" target="_blank" rel="noopener">aprovação ↗</a></div>
+  </div>
   <div class="card" style="margin-top:14px">
-    <table class="tbl"><thead><tr><th>Data</th><th>Evento</th><th class="num">Quantidade</th>
-      <th class="num hide-sm">% float</th><th class="ctr hide-sm">Prazo</th><th class="ctr">Doc</th></tr></thead>
-      <tbody><tr><td class="muted">10/06/2026</td><td><span class="badge b-execucao">Recompra executada</span></td><td class="num strong">14,725,400 <span class="faint">ações</span> · R$ 36.64 méd</td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1533440&numSequencia=1058146&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">10/06/2026</td><td><span class="badge b-aprovacao">Programa aprovado</span></td><td class="num strong">30,000,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1533439&numSequencia=1058145&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">15/12/2025</td><td><span class="badge b-execucao">Recompra executada</span></td><td class="num strong">18,265,000 <span class="faint">ações</span> · R$ 27.37 méd</td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1457513&numSequencia=982225&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">15/12/2025</td><td><span class="badge b-aprovacao">Programa aprovado</span></td><td class="num strong">20,000,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1457537&numSequencia=982249&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">13/12/2024</td><td><span class="badge b-execucao">Recompra executada</span></td><td class="num strong">30,000,000 <span class="faint">ações</span> · R$ 27.26 méd</td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1315621&numSequencia=840347&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">13/12/2024</td><td><span class="badge b-aprovacao">Programa aprovado</span></td><td class="num strong">30,000,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1315609&numSequencia=840335&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr><tr><td class="muted">11/06/2024</td><td><span class="badge b-aprovacao">Programa aprovado</span></td><td class="num strong">30,000,000 <span class="faint">ações</span></td><td class="num hide-sm">—</td><td class="ctr hide-sm">12m</td><td class="ctr"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1249058&numSequencia=773784&numVersao=1" target="_blank" rel="noopener">↗</a></td></tr></tbody></table>
+    <table class="tbl"><thead><tr><th>Programa</th><th>Período</th><th>Limites</th>
+      <th class="num">Executado</th><th>Encerrou por</th><th class="ctr">Documentos</th></tr></thead>
+      <tbody><tr><td class="strong">Programa 3</td><td class="muted">15/12/2025 → 10/06/2026</td><td>até <b>20,000,000</b> ações · até <b>R$ 1.00 bi</b></td><td class="num strong">14,725,400 <span class="faint">(74%)</span><br><span class="ag-sub">R$ 540 mi · R$ 36.64 méd</span></td><td><span class="motivo m-disc">decisão do Conselho</span></td><td class="ctr nowrap"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1457537&numSequencia=982249&numVersao=1" target="_blank" rel="noopener">aprov ↗</a> · <a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1533440&numSequencia=1058146&numVersao=1" target="_blank" rel="noopener">encerr ↗</a></td></tr><tr><td class="strong">Programa 2</td><td class="muted">13/12/2024 → 15/12/2025</td><td>até <b>30,000,000</b> ações · até <b>R$ 1.00 bi</b></td><td class="num strong">18,265,000 <span class="faint">(61%)</span><br><span class="ag-sub">R$ 500 mi · R$ 27.37 méd</span></td><td><span class="motivo m-prazo">fim do prazo</span></td><td class="ctr nowrap"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1315609&numSequencia=840335&numVersao=1" target="_blank" rel="noopener">aprov ↗</a> · <a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1457513&numSequencia=982225&numVersao=1" target="_blank" rel="noopener">encerr ↗</a></td></tr><tr><td class="strong">Programa 1</td><td class="muted">11/06/2024 → 13/12/2024</td><td>até <b>30,000,000</b> ações · até <b>R$ 1.00 bi</b></td><td class="num strong">30,000,000 <span class="faint">(100%)</span><br><span class="ag-sub">R$ 818 mi · R$ 27.26 méd</span></td><td><span class="motivo m-lim">limite de ações</span></td><td class="ctr nowrap"><a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1249058&numSequencia=773784&numVersao=1" target="_blank" rel="noopener">aprov ↗</a> · <a href="https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1315621&numSequencia=840347&numVersao=1" target="_blank" rel="noopener">encerr ↗</a></td></tr></tbody></table>
   </div>
   
   <h2>Execução por programa <span class="h-meta">executado × autorizado · motivo do encerramento</span></h2>
@@ -211,5 +238,5 @@ footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex
   document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>render(b.dataset.g)));
   render('todos');
 })();</script>
-  <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · 19/06/2026 15:17</span></footer>
+  <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · 19/06/2026 15:25</span></footer>
 </div></body></html>

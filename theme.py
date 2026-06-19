@@ -69,6 +69,19 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .substats{font:500 12.5px 'IBM Plex Mono',monospace;color:var(--muted);margin:12px 2px 0}
 .substats b{color:var(--paper);font-weight:600}
 
+/* programa de recompra em andamento (destaque) */
+.open-prog{margin-top:14px;border:1px solid var(--accent);border-radius:9px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(63,167,181,.10),rgba(63,167,181,.02))}
+.op-head{display:flex;align-items:center;gap:11px;padding:14px 18px 0}
+.op-tag{font:600 14px 'Fraunces',serif;color:var(--paper)}
+.op-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin:14px 0 0;border-top:1px solid var(--line)}
+.opc{padding:13px 18px;border-right:1px solid var(--line)}.opc:last-child{border-right:0}
+.opl{font:600 9.5px 'Inter',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+.opv{font:600 15px 'IBM Plex Mono',monospace;color:var(--paper)}
+.op-foot{padding:11px 18px;border-top:1px solid var(--line);font:500 12px 'IBM Plex Mono',monospace}
+.nowrap{white-space:nowrap}
+@media (max-width:760px){.op-grid{grid-template-columns:repeat(2,1fr)}.opc:nth-child(2n){border-right:0}}
+
 /* execução por programa */
 .prog-grid{display:flex;flex-direction:column;gap:14px;margin-top:14px}
 .prog-card{padding:0}
