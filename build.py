@@ -484,6 +484,87 @@ _CVM_JS = r"""<script>(()=>{
 })();</script>"""
 
 
+def _vol(v):
+    """R$ em bi/mi, formato internacional."""
+    if not v:
+        return None
+    if abs(v) >= 1e9:
+        return f"R$ {v/1e9:,.2f} bi"
+    if abs(v) >= 1e6:
+        return f"R$ {v/1e6:,.0f} mi"
+    return f"R$ {v/1e3:,.0f} mil"
+
+
+def _win_anchors(hoje: dt.date) -> list[tuple]:
+    """(rótulo, data inicial) das janelas: último mês, 6m, YTD, 12m."""
+    def back(months):
+        m, y = hoje.month - months, hoje.year
+        while m <= 0:
+            m += 12; y -= 1
+        return dt.date(y, m, min(hoje.day, 28))
+    return [("Último mês", back(1)), ("6 meses", back(6)),
+            (f"{hoje.year} · YTD", dt.date(hoje.year, 1, 1)), ("12 meses", back(12))]
+
+
+def _indicators_section(cvm: pd.DataFrame, ticker: str) -> str:
+    """Placar de abertura: compras/vendas (R$) por agente em 4 janelas. Insiders
+    (Controlador/Diretores/Conselho) vêm do CVM 44 à vista; a Tesouraria vem da
+    recompra diária validada. Só transações de mercado (à vista/termo) — empréstimo
+    de ações, bonificação, plano de remuneração e posse não entram."""
+    hoje = dt.date.today()
+    wins = _win_anchors(hoje)
+    c = cvm.copy()
+    c["dm"] = pd.to_datetime(c["data_mov"], errors="coerce").dt.date
+    c["vol2"] = c["quantidade"].fillna(0) * c["preco"].fillna(0)
+    av = c[c["tipo_mov"].fillna("").str.contains("vista|termo", case=False)]
+
+    def org(o):
+        if "Controlador" in str(o): return "Controlador"
+        if "Diretor" in str(o): return "Diretores"
+        if "Conselho" in str(o): return "Conselho"
+        return None
+    av = av.assign(ag=av["orgao"].map(org))
+    daily = _daily_buys(ticker)  # (date, qty, preco)
+
+    def insider(ag, d0, dirn):
+        sub = av[(av["ag"] == ag) & (av["dm"] >= d0) & (av["direcao"] == dirn)]
+        return float(sub["vol2"].sum()), float(sub["quantidade"].sum())
+
+    def tesouraria(d0):
+        b = [(q, pr) for d, q, pr in daily if d >= d0]
+        return sum(q * pr for q, pr in b), sum(q for q, pr in b)
+
+    def cell(cv, cq, vv, vq):
+        parts = []
+        if cv:
+            parts.append(f'<span class="ind-c" title="{cq:,.0f} ações">▲ {_vol(cv)}</span>')
+        if vv:
+            parts.append(f'<span class="ind-v" title="{vq:,.0f} ações">▼ {_vol(vv)}</span>')
+        return "<br>".join(parts) or '<span class="faint">—</span>'
+
+    rows = []
+    # Tesouraria (só compras: recompra)
+    tds = "".join(f'<td class="num">{cell(*tesouraria(d0), 0, 0)}</td>' for _, d0 in wins)
+    rows.append(f'<tr><td class="strong">Tesouraria<br><span class="ag-sub">recompra</span></td>{tds}</tr>')
+    for ag, sub in [("Controlador", "acionista controlador"), ("Diretores", "diretoria"),
+                    ("Conselho", "conselho de adm.")]:
+        tds = ""
+        for _, d0 in wins:
+            cv, cq = insider(ag, d0, "compra")
+            vv, vq = insider(ag, d0, "venda")
+            tds += f'<td class="num">{cell(cv, cq, vv, vq)}</td>'
+        rows.append(f'<tr><td class="strong">{ag}<br><span class="ag-sub">{sub}</span></td>{tds}</tr>')
+    ths = "".join(f"<th class='num'>{lbl}</th>" for lbl, _ in wins)
+    return f"""
+  <h2>Movimentações recentes <span class="h-meta">compras ▲ e vendas ▼ · volume R$ · à vista</span></h2>
+  <p class="lead">Quanto cada agente <b>comprou</b> (▲) e <b>vendeu</b> (▼) em ações da companhia, em quatro janelas
+    até {_data(hoje.isoformat())}. <b>Tesouraria</b> = recompra (execução diária validada); <b>Controlador, Diretores
+    e Conselho</b> = negócios à vista no CVM 44 (Res. 44). Só transações de mercado — passe o mouse para ver as ações.</p>
+  <div class="card"><table class="tbl ind-tbl">
+    <thead><tr><th>Agente</th>{ths}</tr></thead>
+    <tbody>{''.join(rows)}</tbody></table></div>"""
+
+
 def render(ticker: str) -> str:
     info = companies.COMPANIES[ticker]
     rec = pd.read_parquet(BASE / "data" / "recompra.parquet")
@@ -494,6 +575,7 @@ def render(ticker: str) -> str:
     rec_body, rk = _recompra_section(rec)
     prog_body = _prog_exec_section(rec, ticker)
     cvm_body, ck = _cvm44_section(cvm, ticker)
+    ind_body = _indicators_section(cvm, ticker)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
 
     kpis = f"""
@@ -514,6 +596,7 @@ def render(ticker: str) -> str:
       <span>Gerado em <b>{gerado}</b></span><span class="chip">v1 · {ticker}</span></div>
   </header>
   {kpis}
+  {ind_body}
   {rec_body}
   {prog_body}
   {cvm_body}

@@ -51,6 +51,13 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .scroll .tbl th{position:sticky;top:0;z-index:1}
 .pos{color:var(--buy)} .neg{color:var(--sell)}
 
+/* placar de movimentações */
+.ind-tbl td{vertical-align:top}
+.ind-tbl td.num{text-align:right;line-height:1.5}
+.ind-tbl .ag-sub{font:500 9.5px 'Inter',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+.ind-c{color:var(--buy);white-space:nowrap;cursor:help}
+.ind-v{color:var(--sell);white-space:nowrap;cursor:help}
+
 /* filtro de valor mobiliário */
 .filterbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 0}
 .filterbar .flbl{font:600 10px/1 'Inter',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-right:4px}

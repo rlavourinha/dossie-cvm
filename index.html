@@ -55,6 +55,13 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .scroll .tbl th{position:sticky;top:0;z-index:1}
 .pos{color:var(--buy)} .neg{color:var(--sell)}
 
+/* placar de movimentações */
+.ind-tbl td{vertical-align:top}
+.ind-tbl td.num{text-align:right;line-height:1.5}
+.ind-tbl .ag-sub{font:500 9.5px 'Inter',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+.ind-c{color:var(--buy);white-space:nowrap;cursor:help}
+.ind-v{color:var(--sell);white-space:nowrap;cursor:help}
+
 /* filtro de valor mobiliário */
 .filterbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 0}
 .filterbar .flbl{font:600 10px/1 'Inter',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-right:4px}
@@ -106,7 +113,7 @@ footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex
     <h1>Rede D'Or São Luiz · <span class="tk">RDOR3</span></h1>
     <div class="sub"><span>Saúde · Hospitais</span>·
       <span>CNPJ <b>06.047.087/0001-39</b></span>·
-      <span>Gerado em <b>19/06/2026 15:00</b></span><span class="chip">v1 · RDOR3</span></div>
+      <span>Gerado em <b>19/06/2026 15:17</b></span><span class="chip">v1 · RDOR3</span></div>
   </header>
   
   <section class="kpis">
@@ -115,6 +122,14 @@ footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex
     <div class="kpi"><div class="lbl">Fluxo CVM 44 líquido</div><div class="val pos">+R$ 168.9 mi</div><div class="foot">compras − vendas</div></div>
     <div class="kpi"><div class="lbl">Volume CVM 44</div><div class="val">R$ 5.89 bi</div><div class="foot">331 movimentos</div></div>
   </section>
+  
+  <h2>Movimentações recentes <span class="h-meta">compras ▲ e vendas ▼ · volume R$ · à vista</span></h2>
+  <p class="lead">Quanto cada agente <b>comprou</b> (▲) e <b>vendeu</b> (▼) em ações da companhia, em quatro janelas
+    até 19/06/2026. <b>Tesouraria</b> = recompra (execução diária validada); <b>Controlador, Diretores
+    e Conselho</b> = negócios à vista no CVM 44 (Res. 44). Só transações de mercado — passe o mouse para ver as ações.</p>
+  <div class="card"><table class="tbl ind-tbl">
+    <thead><tr><th>Agente</th><th class='num'>Último mês</th><th class='num'>6 meses</th><th class='num'>2026 · YTD</th><th class='num'>12 meses</th></tr></thead>
+    <tbody><tr><td class="strong">Tesouraria<br><span class="ag-sub">recompra</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="ind-c" title="7,109,000 ações">▲ R$ 287 mi</span></td><td class="num"><span class="ind-c" title="7,109,000 ações">▲ R$ 287 mi</span></td><td class="num"><span class="ind-c" title="7,109,000 ações">▲ R$ 287 mi</span></td></tr><tr><td class="strong">Controlador<br><span class="ag-sub">acionista controlador</span></td><td class="num"><span class="ind-c" title="3,460,541 ações">▲ R$ 119 mi</span></td><td class="num"><span class="ind-c" title="34,604,741 ações">▲ R$ 1.28 bi</span></td><td class="num"><span class="ind-c" title="34,604,741 ações">▲ R$ 1.28 bi</span></td><td class="num"><span class="ind-c" title="34,604,741 ações">▲ R$ 1.28 bi</span></td></tr><tr><td class="strong">Diretores<br><span class="ag-sub">diretoria</span></td><td class="num"><span class="ind-c" title="941 ações">▲ R$ 1 mi</span></td><td class="num"><span class="ind-c" title="941 ações">▲ R$ 1 mi</span><br><span class="ind-v" title="157,000 ações">▼ R$ 7 mi</span></td><td class="num"><span class="ind-c" title="941 ações">▲ R$ 1 mi</span><br><span class="ind-v" title="157,000 ações">▼ R$ 7 mi</span></td><td class="num"><span class="ind-c" title="1,350 ações">▲ R$ 1 mi</span><br><span class="ind-v" title="1,572,314 ações">▼ R$ 72 mi</span></td></tr><tr><td class="strong">Conselho<br><span class="ag-sub">conselho de adm.</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="faint">—</span></td><td class="num"><span class="faint">—</span></td></tr></tbody></table></div>
   
   <h2>Recompra de ações <span class="h-meta">programas &amp; execução</span></h2>
   <p class="lead">Programas de recompra autorizados pelo Conselho e o quanto foi
@@ -196,5 +211,5 @@ footer{margin-top:42px;color:var(--faint);font-size:11.5px;font-family:'IBM Plex
   document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>render(b.dataset.g)));
   render('todos');
 })();</script>
-  <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · 19/06/2026 15:00</span></footer>
+  <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · 19/06/2026 15:17</span></footer>
 </div></body></html>
