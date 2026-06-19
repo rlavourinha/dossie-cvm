@@ -159,6 +159,10 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         progs.append(dict(start=start, deadline=start + dt.timedelta(days=round(prazo * 30.44)),
                           auth=float(r["qtd_autorizada"]), prazo=prazo, exec=None, exec_date=None))
     progs.sort(key=lambda p: p["start"])
+    # encerramento REAL: programas são sequenciais (sem sobreposição); cada um é
+    # encerrado quando o próximo abre. O último em aberto não tem data de fim.
+    for i, p in enumerate(progs):
+        p["end"] = progs[i + 1]["start"] if i + 1 < len(progs) else None
     # execuções (dedup por valor+mês)
     ex = rec[rec.get("qtd_executada").fillna(0) > 0].copy()
     seen, execs = set(), []
@@ -204,37 +208,40 @@ def _prog_panel(p: dict, idx: int) -> str:
     s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Execução do programa {idx}">']
     # eixo base
     s.append(f'<line class="svg-zero" x1="{padL}" y1="{ybot}" x2="{x(p["deadline"]):.1f}" y2="{ybot}"/>')
-    # execução: curva REAL (compras diárias acumuladas) ou rampa esquemática
+    # execução observada DIA A DIA (tesouraria) — pode estar incompleta no mês corrente
     cum = p.get("cum")
+    daily_end, xe = None, None
     if cum:
         pts = [(padL, ybot)] + [(x(d), y(c)) for d, c in cum]
         xe, ye = pts[-1]
-        last = cum[-1][1]
+        daily_end = cum[-1][1]
         poly = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
         s.append(f'<polygon points="{padL},{ybot} {poly} {xe:.1f},{ybot}" fill="rgba(70,185,138,.16)"/>')
         s.append(f'<polyline points="{poly}" fill="none" stroke="var(--buy)" stroke-width="2"/>')
         for px, py in pts[1:]:
             s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="2.2" fill="var(--buy)"/>')
-        pct = 100 * last / p["auth"] if p["auth"] else 0
-        s.append(f'<text class="svg-tkr" x="{xe+6:.1f}" y="{ye+4:.1f}">{_qtd(last)} · {pct:.0f}%</text>')
-    elif p["exec"] and p["exec_date"]:
-        xe, ye = x(p["exec_date"]), y(p["exec"])
-        s.append(f'<polygon points="{padL},{ybot} {xe:.1f},{ye:.1f} {xe:.1f},{ybot}" fill="rgba(70,185,138,.18)"/>')
-        s.append(f'<polyline points="{padL},{ybot} {xe:.1f},{ye:.1f}" fill="none" stroke="var(--buy)" stroke-width="2.2" stroke-dasharray="4 3"/>')
-        s.append(f'<circle cx="{xe:.1f}" cy="{ye:.1f}" r="3.5" fill="var(--buy)"/>')
-        pct = 100 * p["exec"] / p["auth"] if p["auth"] else 0
-        s.append(f'<text class="svg-tkr" x="{xe+6:.1f}" y="{ye+4:.1f}">{_qtd(p["exec"])} · {pct:.0f}% (total)</text>')
-    # total OFICIAL (encerramento) como referência, quando difere do diário validado
-    if cum and p.get("exec") and abs(p["exec"] - p.get("exec_real", 0)) > 0.02 * p["auth"]:
-        yo = y(p["exec"])
-        s.append(f'<line x1="{padL}" y1="{yo:.1f}" x2="{x(p["deadline"]):.1f}" y2="{yo:.1f}" stroke="var(--buy)" stroke-width="1" stroke-dasharray="2 3" opacity=".6"/>')
-        s.append(f'<text class="svg-val" x="{x(p["deadline"])+6:.1f}" y="{yo+4:.1f}" fill="var(--buy)">oficial {_qtd(p["exec"])}</text>')
-    # linha do MÁXIMO autorizado (teto)
+    # EXECUTADO FINAL (oficial do encerramento = a verdade); o diário é complementar.
+    # Sem doc de execução ainda (programa em aberto), cai pro diário acumulado.
+    final = p.get("exec") or daily_end
+    if final:
+        yo = y(final); pct = 100 * final / p["auth"] if p["auth"] else 0
+        s.append(f'<line x1="{padL}" y1="{yo:.1f}" x2="{x(p["deadline"]):.1f}" y2="{yo:.1f}" stroke="var(--buy)" stroke-width="1.6"/>')
+        s.append(f'<text class="svg-tkr" x="{x(p["deadline"])+6:.1f}" y="{yo+4:.1f}" fill="var(--buy)">{_qtd(final)} · {pct:.0f}%</text>')
+        # diário ainda parcial (faltam formulários do mês corrente)
+        if daily_end and final - daily_end > 0.02 * p["auth"] and xe is not None:
+            s.append(f'<text class="svg-val" x="{xe+6:.1f}" y="{y(daily_end)+4:.1f}" fill="var(--muted)">diário {_qtd(daily_end)} · parcial</text>')
+    # linha do MÁXIMO autorizado (teto) — o programa NÃO precisa chegar nela
     s.append(f'<line x1="{padL}" y1="{ytop:.1f}" x2="{x(p["deadline"]):.1f}" y2="{ytop:.1f}" stroke="var(--gold)" stroke-width="1.3" stroke-dasharray="5 4"/>')
     s.append(f'<text class="svg-val" x="{x(p["deadline"])+6:.1f}" y="{ytop+4:.1f}" fill="var(--gold)">máx {_qtd(p["auth"])}</text>')
-    # linha vertical do PRAZO FINAL
+    # vertical da VALIDADE nominal (vence aqui se não for encerrado antes)
     s.append(f'<line x1="{x(p["deadline"]):.1f}" y1="{ytop-6:.1f}" x2="{x(p["deadline"]):.1f}" y2="{ybot+4:.1f}" stroke="var(--sell)" stroke-width="1.2" stroke-dasharray="4 4"/>')
-    s.append(f'<text class="svg-axis" x="{x(p["deadline"]):.1f}" y="{ybot+18:.1f}" text-anchor="middle" fill="var(--sell)">prazo {_data(p["deadline"].isoformat())}</text>')
+    s.append(f'<text class="svg-axis" x="{x(p["deadline"]):.1f}" y="{ybot+18:.1f}" text-anchor="middle" fill="var(--sell)">validade {_data(p["deadline"].isoformat())}</text>')
+    # marcador do ENCERRAMENTO REAL, quando o programa acabou antes da validade
+    end = p.get("end")
+    if end and end < p["deadline"]:
+        xc = x(end)
+        s.append(f'<line x1="{xc:.1f}" y1="{ytop-6:.1f}" x2="{xc:.1f}" y2="{ybot+4:.1f}" stroke="var(--accent)" stroke-width="1.4"/>')
+        s.append(f'<text class="svg-axis" x="{xc:.1f}" y="{ytop-9:.1f}" text-anchor="middle" fill="var(--accent)">encerrado {_data(end.isoformat())}</text>')
     # eixo y: 0 e máx
     s.append(f'<text class="svg-axis" x="{padL-7}" y="{ybot+4:.1f}" text-anchor="end">0</text>')
     s.append(f'<text class="svg-axis" x="{padL-7}" y="{ytop+4:.1f}" text-anchor="end">{p["auth"]/1e6:.0f}M</text>')
@@ -247,23 +254,31 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
     progs = _programs(rec, ticker)
     if not progs:
         return ""
-    has_daily = any(p.get("cum") for p in progs)
     panels = []
     for i, p in enumerate(progs, 1):
         pm = f' · preço médio {_preco(p["preco_med"])}' if p.get("preco_med") else ""
+        final = p.get("exec") or p.get("exec_real")
+        if final:
+            pct = 100 * final / p["auth"] if p["auth"] else 0
+            res = f' · executou <b>{_qtd(final)}</b> de {_qtd(p["auth"])} ({pct:.0f}%)'
+        else:
+            res = ""
+        if p.get("end"):
+            fim = f'encerrado {_data(p["end"].isoformat())}'
+        else:
+            fim = f'em andamento · vence {_data(p["deadline"].isoformat())}'
         head = (f'<div class="prog-h"><span class="prog-n">Programa {i}</span>'
-                f'<span class="muted">{_data(p["start"].isoformat())} → {_data(p["deadline"].isoformat())} · '
-                f'{p["prazo"]} meses · autorizado {_qtd(p["auth"])}{pm}</span></div>')
+                f'<span class="muted">início {_data(p["start"].isoformat())} · {fim} · '
+                f'{p["prazo"]} meses{res}{pm}</span></div>')
         panels.append(f'<div class="card prog-card">{head}<div class="chart-box">{_prog_panel(p, i)}</div></div>')
-    nota = ("a <b>curva verde</b> é a <b>execução diária real</b> da tesouraria (compras validadas pelo saldo dos "
-            "formulários mensais do VLMO)" if has_daily else
-            "a <b>rampa verde</b> sobe até o total recomprado (a CVM divulga só o total por programa)")
     return f"""
-  <h2>Execução por programa <span class="h-meta">executado × máximo autorizado × prazo</span></h2>
-  <p class="lead">Cada programa: {nota}, a <b>linha dourada</b> é o <b>máximo autorizado</b>
-    e a <b>vertical vermelha</b> marca o <b>prazo final</b>. A linha pontilhada é o
-    <b>total oficial</b> do encerramento; onde a curva diária fica abaixo dela, faltam os
-    <b>formulários de tesouraria ainda não publicados</b> (a referência do mês fecha ~dia 10 do mês seguinte).</p>
+  <h2>Execução por programa <span class="h-meta">executado × autorizado · cada um vence no seu prazo</span></h2>
+  <p class="lead">Programas são <b>sequenciais</b> (um de cada vez) e <b>vencem pela data de validade</b> —
+    <b>não precisam atingir o máximo autorizado</b>. A <b>linha verde sólida</b> é o
+    <b>executado oficial</b> do encerramento (o número que vale); a <b>curva verde</b> é a execução
+    diária da tesouraria, que pode estar <b>parcial</b> no mês corrente (o formulário fecha ~dia 10 do mês
+    seguinte). A <b>linha dourada</b> é o teto autorizado, a <b>vertical vermelha</b> a <b>validade</b> nominal
+    e a <b>vertical teal</b> a data em que o programa foi <b>encerrado de fato</b> (ao abrir o seguinte).</p>
   <div class="prog-grid">{''.join(panels)}</div>"""
 
 
