@@ -236,14 +236,61 @@ _MES_PT = ["", "janeiro", "fevereiro", "março", "abril", "maio", "junho",
            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
 
+def _detect_splits(ticker: str, d: pd.DataFrame) -> list:
+    """Detecta desdobramentos/grupamentos: um SALTO overnight forte no preço cru
+    (COTAHIST não ajusta) que COINCIDE com um 'Desdobramento/bonificação' no CVM 44.
+    Retorna [(data_split, ratio)] com ratio = preço_antes / preço_depois."""
+    try:
+        cv = pd.read_parquet(BASE / "data" / "cvm44.parquet")
+    except Exception:
+        return []
+    cv = cv[(cv["ticker"] == ticker)
+            & cv["tipo_mov"].fillna("").str.contains("desdobr|bonifica|grupa", case=False)]
+    dd = set(pd.to_datetime(cv["data_mov"], errors="coerce").dt.date.dropna())
+    if not dd:
+        return []
+    d = d.sort_values("data").reset_index(drop=True)
+    splits = []
+    for i in range(1, len(d)):
+        r = d["preco"].iloc[i - 1] / d["preco"].iloc[i]
+        if (r > 1.8 or r < 0.55) and any(abs((x - d["data"].iloc[i]).days) <= 5 for x in dd):
+            splits.append((d["data"].iloc[i], float(r)))
+    return splits
+
+
+def _ticker_splits(ticker: str) -> list:
+    """Splits detectados para o ticker (lista [(data, ratio)]), a partir do preço cru."""
+    f = BASE / "data" / f"precos_{ticker}.csv"
+    if not f.exists():
+        return []
+    d = pd.read_csv(f, header=None, names=["data", "preco"])
+    d["data"] = pd.to_datetime(d["data"], errors="coerce").dt.date
+    return _detect_splits(ticker, d.dropna())
+
+
+def _split_factor(splits: list, date) -> float:
+    """Fator p/ retroajustar um preço da data à escala atual = produto dos ratios
+    dos splits POSTERIORES à data. preço_ajustado = preço_cru / fator."""
+    f = 1.0
+    for sd, ratio in splits:
+        if date and date < sd:
+            f *= ratio
+    return f
+
+
 def _market_prices(ticker: str):
-    """Preço diário de fechamento (COTAHIST) em data/precos_<ticker>.csv, se houver."""
+    """Preço diário de fechamento (COTAHIST) em data/precos_<ticker>.csv, se houver.
+    RETROAJUSTA por splits (back-adjust à escala atual) — senão o histórico pré-split
+    aparece inflado (ex.: PRIO a R$170 em 2019 = ~R$3 hoje após 2 desdobramentos)."""
     f = BASE / "data" / f"precos_{ticker}.csv"
     if not f.exists():
         return None
     d = pd.read_csv(f, header=None, names=["data", "preco"])
     d["data"] = pd.to_datetime(d["data"], errors="coerce").dt.date
-    return d.dropna()
+    d = d.dropna().sort_values("data").reset_index(drop=True)
+    for sd, ratio in _detect_splits(ticker, d):
+        d.loc[d["data"] < sd, "preco"] /= ratio   # preços antes do split caem à escala atual
+    return d
 
 
 def _reconcile_note(p: dict, ticker: str) -> str:
@@ -774,17 +821,29 @@ def _buy_groups(ticker: str):
         rd = rd[rd["ticker"] == ticker]
     cv = cv[cv["ticker"] == ticker]
 
+    # preço RETROAJUSTADO por split (mesma escala da linha de preço), senão as
+    # compras pré-split (ex. insiders da PRIO em 2020-21) ficam fora da curva.
+    splits = _ticker_splits(ticker)
+
+    def _mk(dates, precos, qts):
+        out = []
+        for d, p, q in zip(dates, precos, qts):
+            if not (p and p > 0):
+                continue
+            do = _date_obj(str(d)[:10])
+            if do:
+                out.append((do, float(p) / _split_factor(splits, do), float(q)))
+        return out
+
     raw = {}
     t = rd[rd["operacao"] == "compra"]
-    raw["Tesouraria"] = [(_date_obj(str(d)[:10]), float(p), float(q))
-                         for d, p, q in zip(t["data"], t["preco"], t["quantidade"]) if p and p > 0]
+    raw["Tesouraria"] = _mk(t["data"], t["preco"], t["quantidade"])
     av = cv[cv["tipo_mov"].fillna("").str.contains("vista|termo", case=False)
             & (cv["direcao"] == "compra")
             & cv["especie"].map(lambda e: _ascii(e).startswith("aco"))]
     for g in ("Controlador", "Diretores", "Conselho"):
         s = av[av["orgao"].map(lambda o: g in str(o))]
-        raw[g] = [(_date_obj(str(d)[:10]), float(p), float(q))
-                  for d, p, q in zip(s["data_mov"], s["preco"], s["quantidade"]) if p and p > 0]
+        raw[g] = _mk(s["data_mov"], s["preco"], s["quantidade"])
 
     out = {}
     for g, pts in raw.items():
