@@ -882,6 +882,15 @@ def _timing_section(ticker: str) -> str:
     <div class="tim-leg">{''.join(leg)}</div></div>"""
 
 
+def _treasury_saldo(ticker: str):
+    import json
+    f = BASE / "data" / "tesouraria.json"
+    if not f.exists():
+        return None
+    d = json.loads(f.read_text(encoding="utf-8")).get(ticker)
+    return d if d and d.get("saldo") else None
+
+
 def _company_nav(current: str) -> str:
     if len(companies.COMPANIES) < 2:
         return ""
@@ -905,6 +914,9 @@ def render(ticker: str) -> str:
     ind_body = _indicators_section(cvm, ticker)
     tim_body = _timing_section(ticker)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
+    ts = _treasury_saldo(ticker)
+    _tes_html = (f'<span>Tesouraria <b>{_qtd(ts["saldo"])}</b> ações '
+                 f'<span class="faint">({_mes(ts["data_ref"])})</span></span>·' if ts else "")
 
     kpis = f"""
   <section class="kpis">
@@ -921,7 +933,7 @@ def render(ticker: str) -> str:
     {_company_nav(ticker)}
     <h1>{info['nome']} · <span class="tk">{ticker}</span></h1>
     <div class="sub"><span>{info['setor']}</span>·
-      <span>CNPJ <b>{info['cnpj']}</b></span>·
+      <span>CNPJ <b>{info['cnpj']}</b></span>·{_tes_html}
       <span>Gerado em <b>{gerado}</b></span><span class="chip">v1 · {ticker}</span></div>
   </header>
   {kpis}
