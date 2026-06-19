@@ -454,6 +454,130 @@ def _grp(ticker: str, especie) -> str:
     return ticker if _ascii(especie).startswith("aco") else "Outros"
 
 
+_CVM_GRP = [("Controlador", "#D7B45A"), ("Conselho", "#3FA7B5"), ("Diretor", "#9B8CFF")]
+
+
+def _signmi(v: float) -> str:
+    a = abs(v)
+    s = f"R$ {a/1000:,.2f} bi" if a >= 1000 else f"R$ {a:,.0f} mi"
+    return ("+" if v > 0 else "−" if v < 0 else "") + s
+
+
+def _ticks(lo: float, hi: float, n: int = 5):
+    span = (hi - lo) or 1
+    raw = span / n
+    mag = 10 ** math.floor(math.log10(raw)) if raw > 0 else 1
+    step = min([1, 2, 2.5, 5, 10], key=lambda m: abs(m * mag - raw)) * mag
+    t = math.ceil(lo / step) * step
+    out = []
+    while t <= hi + 1e-9:
+        out.append(t); t += step
+    return out
+
+
+def _cvm_avista(v: pd.DataFrame) -> pd.DataFrame:
+    """Só negócios À VISTA de ações (mercado) — exclui empréstimo de ações,
+    bonificação, plano de remuneração e posse, que poluem o fluxo."""
+    a = v[v["especie"].map(lambda e: _ascii(e).startswith("aco"))
+          & v["tipo_mov"].fillna("").str.contains("vista|termo", case=False)].copy()
+    a["grp"] = a["orgao"].map(lambda o: "Controlador" if "Controlador" in str(o)
+                              else "Diretor" if "Diretor" in str(o)
+                              else "Conselho" if "Conselho" in str(o) else "Outro")
+    a["dt"] = pd.to_datetime(a.get("data_mov").fillna(a["data_ref"]), errors="coerce").dt.date
+    a["sv"] = a["volume"].fillna(0) * a["direcao"].map({"compra": 1, "venda": -1}).fillna(0)
+    return a.dropna(subset=["dt"]).sort_values("dt")
+
+
+def _cvm_cum_svg(a: pd.DataFrame) -> str:
+    W, H, padL, padR, padT, padB = 960, 300, 56, 16, 20, 36
+    xr, yb, yt = W - padR, H - padB, padT
+    d0, d1 = a["dt"].min(), a["dt"].max()
+    span = max((d1 - d0).days, 1)
+    series, vals = {}, [0.0]
+    for g, _ in _CVM_GRP:
+        sub = a[a["grp"] == g]
+        cum, pts = 0.0, [(d0, 0.0)]
+        for d, sv in zip(sub["dt"], sub["sv"]):
+            pts.append((d, cum)); cum += sv / 1e6; pts.append((d, cum))
+        pts.append((d1, cum))
+        series[g] = pts; vals += [p[1] for p in pts]
+    ymin, ymax = min(vals), max(vals)
+    p = (ymax - ymin) * 0.08 or 1; ymin -= p; ymax += p
+    x = lambda d: padL + (d - d0).days / span * (xr - padL)
+    y = lambda val: yb - (val - ymin) / (ymax - ymin) * (yb - yt)
+    s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Posição líquida acumulada">']
+    for t in _ticks(ymin, ymax):
+        lbl = f"{t/1000:,.1f}bi" if abs(t) >= 1000 else f"{t:,.0f}"
+        s.append(f'<line x1="{padL}" y1="{y(t):.1f}" x2="{xr}" y2="{y(t):.1f}" stroke="var(--line)" stroke-width="1" opacity="{0.7 if t==0 else 0.4}"/>')
+        s.append(f'<text class="svg-axis" x="{padL-7}" y="{y(t)+3:.1f}" text-anchor="end">{lbl}</text>')
+    for yr in range(d0.year + 1, d1.year + 1):
+        xa = x(dt.date(yr, 1, 1))
+        s.append(f'<line x1="{xa:.1f}" y1="{yt}" x2="{xa:.1f}" y2="{yb}" stroke="var(--line)" stroke-width="1" opacity=".3"/>')
+        s.append(f'<text class="svg-axis" x="{xa:.1f}" y="{yb+16:.1f}" text-anchor="middle">{yr}</text>')
+    for g, color in _CVM_GRP:
+        pts = " ".join(f"{x(d):.1f},{y(val):.1f}" for d, val in series[g])
+        s.append(f'<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="2"/>')
+        d, val = series[g][-1]
+        s.append(f'<circle cx="{x(d):.1f}" cy="{y(val):.1f}" r="3" fill="{color}"/>')
+    s.append(f'<text class="svg-bm" x="{padL}" y="{padT-7}">posição líquida acumulada · R$ mi (à vista)</text></svg>')
+    return "".join(s)
+
+
+def _cvm_year_svg(a: pd.DataFrame) -> str:
+    W, H, padL, padR, padT, padB = 960, 290, 56, 16, 22, 34
+    xr, yb, yt = W - padR, H - padB, padT
+    years = sorted({d.year for d in a["dt"]})
+    net = {(yr, g): 0.0 for yr in years for g, _ in _CVM_GRP}
+    keys = {g for g, _ in _CVM_GRP}
+    for d, g, sv in zip(a["dt"], a["grp"], a["sv"]):
+        if g in keys:
+            net[(d.year, g)] += sv / 1e6
+    vals = [v for v in net.values()] + [0.0]
+    ymin, ymax = min(vals), max(vals)
+    p = (ymax - ymin) * 0.1 or 1; ymin -= p * 0.3; ymax += p
+    slot = (xr - padL) / len(years)
+    bw = min(26, slot / (len(_CVM_GRP) + 1.5))
+    y = lambda val: yb - (val - ymin) / (ymax - ymin) * (yb - yt)
+    s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Fluxo líquido por ano">']
+    for t in _ticks(ymin, ymax):
+        lbl = f"{t/1000:,.1f}bi" if abs(t) >= 1000 else f"{t:,.0f}"
+        s.append(f'<line x1="{padL}" y1="{y(t):.1f}" x2="{xr}" y2="{y(t):.1f}" stroke="var(--line)" stroke-width="1" opacity="{0.7 if t==0 else 0.4}"/>')
+        s.append(f'<text class="svg-axis" x="{padL-7}" y="{y(t)+3:.1f}" text-anchor="end">{lbl}</text>')
+    y0 = y(0)
+    for i, yr in enumerate(years):
+        cx = padL + slot * i + slot / 2
+        s.append(f'<text class="svg-axis" x="{cx:.1f}" y="{yb+16:.1f}" text-anchor="middle">{yr}</text>')
+        actives = [(g, c) for g, c in _CVM_GRP if abs(net[(yr, g)]) > 0.01]
+        m = len(actives)
+        for j, (g, color) in enumerate(actives):
+            v = net[(yr, g)]
+            bx = cx + (j - (m - 1) / 2) * (bw + 2) - bw / 2
+            by = y(v) if v >= 0 else y0
+            h = max(abs(y(v) - y0), 1)
+            s.append(f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bw:.1f}" height="{h:.1f}" rx="2" fill="{color}"/>')
+            if abs(v) >= 0.08 * (ymax - ymin):
+                ty = by - 4 if v >= 0 else by + h + 11
+                s.append(f'<text class="svg-val" x="{bx+bw/2:.1f}" y="{ty:.1f}" text-anchor="middle">{v/1000:,.1f}bi</text>' if abs(v) >= 1000
+                         else f'<text class="svg-val" x="{bx+bw/2:.1f}" y="{ty:.1f}" text-anchor="middle">{v:,.0f}</text>')
+    s.append(f'<text class="svg-bm" x="{padL}" y="{padT-8}">fluxo líquido por ano · R$ mi · ▲ compra ▼ venda</text></svg>')
+    return "".join(s)
+
+
+def _cvm_flow_block(v: pd.DataFrame) -> str:
+    a = _cvm_avista(v)
+    if a.empty:
+        return ""
+    cap = " · ".join(
+        f'<span class="cvm-net"><span class="tim-dot" style="background:{c}"></span>{g} '
+        f'<b>{_signmi(a[a["grp"]==g]["sv"].sum()/1e6)}</b></span>' for g, c in _CVM_GRP)
+    return f"""
+  <p class="substats" style="margin:14px 2px 4px">Fluxo à vista (mercado), líquido desde o IPO:
+    {cap} · <span class="muted">{len(a)} negócios</span></p>
+  <div class="card"><div class="chart-box">{_cvm_cum_svg(a)}</div></div>
+  <div class="card" style="margin-top:12px"><div class="chart-box">{_cvm_year_svg(a)}</div>
+    <div class="tim-leg">{''.join(f'<div class="tim-row" style="gap:8px"><span class="tim-dot" style="background:{c}"></span><span class="tim-g">{g}</span></div>' for g,c in _CVM_GRP)}</div></div>"""
+
+
 def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     import json
     v = v.copy()
@@ -475,16 +599,17 @@ def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     n_out = int((v["especie"].map(lambda e: not _ascii(e).startswith("aco"))).sum())
     body = f"""
   <h2>Movimentações CVM 44 <span class="h-meta">Res. 44 art. 11 · VLMO · {_mes(months[0])}–{_mes(months[-1])}</span></h2>
-  <p class="lead">Compras e vendas declaradas por <b>controlador, administradores e tesouraria</b>
-    (Resolução CVM 44, art. 11), desde o IPO. A VLMO traz a ação <b>{ticker}</b> e
-    <b>outros valores mobiliários</b> ({n_out} registros) — use o filtro para separar.</p>
-  <div class="filterbar">
+  <p class="lead">Compras e vendas <b>à vista</b> de <b>{ticker}</b> declaradas por <b>controlador,
+    administradores e tesouraria</b> (Res. CVM 44, art. 11), desde o IPO — exclui empréstimo de ações,
+    bonificação e plano de remuneração, que não são negócios de mercado. Acima, o fluxo agregado;
+    abaixo, o <b>filtro</b> separa ações × outros valores mobiliários na tabela detalhada.</p>
+  {_cvm_flow_block(v)}
+  <div class="filterbar" style="margin-top:22px">
     <span class="flbl">Valor mobiliário</span>
     <button class="fbtn active" data-g="todos">Todos</button>
     <button class="fbtn" data-g="{ticker}">{ticker} · ações</button>
     <button class="fbtn" data-g="Outros">Outros</button>
   </div>
-  <div class="card chart-box" style="margin-top:12px"><div id="cvm-chart"></div></div>
   <div class="substats" id="cvm-stats"></div>
   <div class="card" style="margin-top:14px">
     <div class="scroll"><table class="tbl"><thead><tr><th>Negócio</th><th>Órgão</th>
@@ -507,26 +632,10 @@ _CVM_JS = r"""<script>(()=>{
     a>=1e9?'R$ '+(v/1e9).toFixed(2)+' bi':a>=1e6?'R$ '+(v/1e6).toFixed(1)+' mi':
     a>=1e3?'R$ '+Math.round(v/1e3).toLocaleString('en-US')+' mil':'R$ '+Math.round(v).toLocaleString('en-US');
     return (sg&&v>0?'+':'')+s;};
-  function chart(rows){
-    const bym={}; rows.forEach(r=>{const s=r.dir==='compra'?1:-1; bym[r.ym]=(bym[r.ym]||0)+s*(r.vol||0);});
-    const months=Object.keys(bym).sort(), vals=months.map(m=>bym[m]/1e6), n=months.length;
-    if(!n) return '<div class="lead" style="padding:14px">Sem movimentações neste filtro.</div>';
-    const W=720,H=240,padL=8,padR=8,padT=20,padB=30,plotW=W-padL-padR,plotH=H-padT-padB,y0=padT+plotH/2;
-    const maxabs=Math.max(1,...vals.map(Math.abs)),sc=(plotH/2-12)/maxabs,slot=plotW/n,bw=Math.min(40,slot*0.62),showV=n<=16;
-    let s=`<svg viewBox="0 0 ${W} ${H}" role="img"><line class="svg-zero" x1="${padL}" y1="${y0}" x2="${W-padR}" y2="${y0}"/>`,py=null;
-    for(let i=0;i<n;i++){const v=vals[i],xc=padL+slot*i+slot/2,h=Math.abs(v)*sc,y=v>=0?y0-h:y0;
-      s+=`<rect x="${(xc-bw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h,0.6).toFixed(1)}" rx="2" fill="${v>=0?'var(--buy)':'var(--sell)'}"/>`;
-      if(showV){const vy=v>=0?y-5:y+h+12;s+=`<text class="svg-val" x="${xc.toFixed(1)}" y="${vy.toFixed(1)}" text-anchor="middle">${(v>0?'+':'')+v.toFixed(0)}</text>`;}
-      const yr=months[i].slice(0,4); if(yr!==py){s+=`<line class="svg-zero" x1="${(xc-slot/2).toFixed(1)}" y1="${padT}" x2="${(xc-slot/2).toFixed(1)}" y2="${H-padB}" opacity="0.35"/><text class="svg-axis" x="${(xc-slot/2+3).toFixed(1)}" y="${H-10}">${yr}</text>`;py=yr;}}
-    return s+`<text class="svg-bm" x="${padL}" y="${padT-7}">compra líq. (+) · R$ mi</text></svg>`;
-  }
   function render(g){
     const rows=g==='todos'?DATA:DATA.filter(r=>r.grp===g);
-    document.getElementById('cvm-chart').innerHTML=chart(rows);
-    let net=0,vol=0; const byo={};
-    rows.forEach(r=>{const s=r.dir==='compra'?1:-1;net+=s*(r.vol||0);vol+=(r.vol||0);byo[r.org]=(byo[r.org]||0)+s*(r.vol||0);});
-    const orgs=Object.entries(byo).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([o,s])=>o+': <b>'+fmtBRL(s,true)+'</b>').join(' · ');
-    document.getElementById('cvm-stats').innerHTML=`<b>${rows.length}</b> movimentos · líquido <b class="${net>=0?'pos':'neg'}">${fmtBRL(net,true)}</b> · volume <b>${fmtBRL(vol)}</b>${orgs?' · '+orgs:''}`;
+    let vol=0; rows.forEach(r=>{vol+=(r.vol||0);});
+    document.getElementById('cvm-stats').innerHTML=`Tabela: <b>${rows.length}</b> movimentos · volume bruto <b>${fmtBRL(vol)}</b> <span class="faint">(inclui empréstimo, bonificação e plano)</span>`;
     document.getElementById('cvm-rows').innerHTML=rows.slice().sort((a,b)=>(b.dm||'').localeCompare(a.dm||'')).map(r=>{
       const cls=r.dir==='compra'?'b-compra':'b-venda';
       return `<tr><td class="muted">${fmtD(r.dm)}</td><td>${r.org}</td><td class="muted hide-sm">${r.grp}</td>`+

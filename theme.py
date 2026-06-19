@@ -66,6 +66,7 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
   font:600 12px 'IBM Plex Mono',monospace;letter-spacing:.02em;transition:.13s}
 .fbtn:hover{color:var(--paper);border-color:var(--accent)}
 .fbtn.active{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.cvm-net{display:inline-flex;align-items:center;gap:6px}
 .substats{font:500 12.5px 'IBM Plex Mono',monospace;color:var(--muted);margin:12px 2px 0}
 .substats b{color:var(--paper);font-weight:600}
 
