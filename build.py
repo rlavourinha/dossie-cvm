@@ -447,6 +447,21 @@ def _recompra_section(rec: pd.DataFrame, ticker: str) -> tuple[str, dict]:
             f'<td>{motivo}</td>'
             f'<td class="ctr nowrap">{docs}</td></tr>')
 
+    # --- cancelamentos de ações em tesouraria (redução de capital) ---
+    canc = ""
+    if "qtd_cancelada" in rec.columns:
+        cr = rec[(rec["tipo"] == "cancelamento") & rec["qtd_cancelada"].notna()]
+        cr = cr.sort_values("data_entrega").drop_duplicates("qtd_cancelada")
+        if len(cr):
+            itens = " · ".join(
+                f'<b>{_qtd(c["qtd_cancelada"])}</b> ações em {_data(str(c["data_entrega"])[:10])} '
+                f'{_doclink(c.get("link"), "doc")}' for _, c in cr.iterrows())
+            tot = cr["qtd_cancelada"].sum()
+            canc = (f'<div class="recon-note" style="border-left-color:var(--sell);background:rgba(224,113,76,.07)">'
+                    f'<div class="rn-tag" style="color:var(--sell)">Cancelamento de ações em tesouraria</div>'
+                    f'A companhia <b>cancelou</b> (redução de capital, não é venda) {itens}. '
+                    f'Some {_qtd(tot)} ações que saíram da tesouraria sem ir ao mercado.</div>')
+
     body = f"""
   <h2>Recompra de ações <span class="h-meta">programas &amp; execução</span></h2>
   <p class="lead">Programas de recompra autorizados pelo Conselho — datas, limites (ações e valor),
@@ -457,7 +472,8 @@ def _recompra_section(rec: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     <table class="tbl"><thead><tr><th>Programa</th><th>Período</th><th>Limites</th>
       <th class="num">Executado</th><th>Encerrou por</th><th class="ctr">Documentos</th></tr></thead>
       <tbody>{''.join(rows) or '<tr><td colspan=6 class=muted>Sem programas encerrados.</td></tr>'}</tbody></table>
-  </div>"""
+  </div>
+  {canc}"""
     return body, {"n_prog": n_prog, "total_exec": total_exec}
 
 
