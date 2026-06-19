@@ -157,26 +157,30 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
             continue
         prazo = int(r["prazo_meses"]) if not _na(r.get("prazo_meses")) else 12
         progs.append(dict(start=start, deadline=start + dt.timedelta(days=round(prazo * 30.44)),
-                          auth=float(r["qtd_autorizada"]), prazo=prazo, exec=None, exec_date=None))
+                          auth=float(r["qtd_autorizada"]), prazo=prazo, exec=None, exec_date=None,
+                          valor_auth=(None if _na(r.get("valor_autorizado")) else float(r["valor_autorizado"])),
+                          exec_value=None))
     progs.sort(key=lambda p: p["start"])
     # encerramento REAL: programas são sequenciais (sem sobreposição); cada um é
     # encerrado quando o próximo abre. O último em aberto não tem data de fim.
     for i, p in enumerate(progs):
         p["end"] = progs[i + 1]["start"] if i + 1 < len(progs) else None
-    # execuções (dedup por valor+mês)
+    # execuções (dedup por valor+mês); carrega também o valor (R$) executado
     ex = rec[rec.get("qtd_executada").fillna(0) > 0].copy()
     seen, execs = set(), []
     for _, e in ex.sort_values("_d").iterrows():
         d, q = _date_obj(e["_d"]), float(e["qtd_executada"])
+        v = None if _na(e.get("valor_executado")) else float(e["valor_executado"])
         k = (round(q), str(e["_d"])[:7])
         if d is None or k in seen:
             continue
-        seen.add(k); execs.append((d, q))
+        seen.add(k); execs.append((d, q, v))
     for i, p in enumerate(progs):
         hi = progs[i + 1]["start"] if i + 1 < len(progs) else dt.date(2100, 1, 1)
-        cand = [(d, q) for d, q in execs if p["start"] < d <= hi]
+        cand = [(d, q, v) for d, q, v in execs if p["start"] < d <= hi]
         if cand:
-            p["exec_date"], p["exec"] = max(cand, key=lambda t: t[0])
+            d, q, v = max(cand, key=lambda t: t[0])
+            p["exec_date"], p["exec"], p["exec_value"] = d, q, v
     # anexa as compras DIÁRIAS (execução real) a cada programa: a compra cai no
     # programa ativo na sua data (último iniciado antes dela).
     daily = _daily_buys(ticker)
@@ -195,7 +199,28 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         vol = sum(q * pr for d, q, pr in b if pr)
         qty = sum(q for d, q, pr in b if pr)
         p["preco_med"] = vol / qty if qty else None
+    for p in progs:
+        p["reason"] = _closure_reason(p)
     return progs
+
+
+def _closure_reason(p: dict):
+    """Por que o programa encerrou. Um programa só acaba por uma de quatro vias:
+    limite de ações, limite de valor (R$), fim do prazo, ou decisão antecipada do
+    Conselho (nenhum teto atingido). Retorna (rótulo, detalhe, classe) ou None se
+    ainda em andamento."""
+    if not p.get("end"):
+        return None
+    sh = (p.get("exec") or 0) / p["auth"] if p.get("auth") else 0
+    val = (p.get("exec_value") or 0) / p["valor_auth"] if p.get("valor_auth") else 0
+    if sh >= 0.995:
+        return ("limite de ações", f"executou {_qtd(p['exec'])} de {_qtd(p['auth'])} (100%)", "lim")
+    if val >= 0.995:
+        return ("limite de valor", f"gastou R$ {p['exec_value']/1e6:,.0f} mi de R$ {p['valor_auth']/1e6:,.0f} mi", "lim")
+    if p["end"] >= p["deadline"] - dt.timedelta(days=7):
+        return ("fim do prazo", f"venceu em {_data(p['deadline'].isoformat())} ({p['prazo']} meses)", "prazo")
+    return ("decisão do Conselho", f"encerrado antes do prazo (em {_data(p['end'].isoformat())}, "
+            f"a {sh*100:.0f}% das ações e {val*100:.0f}% do valor)", "disc")
 
 
 def _prog_panel(p: dict, idx: int) -> str:
@@ -267,18 +292,25 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
             fim = f'encerrado {_data(p["end"].isoformat())}'
         else:
             fim = f'em andamento · vence {_data(p["deadline"].isoformat())}'
-        head = (f'<div class="prog-h"><span class="prog-n">Programa {i}</span>'
+        rsn = p.get("reason")
+        if rsn:
+            motivo = (f'<span class="motivo m-{rsn[2]}" title="{rsn[1]}">{rsn[0]}</span>')
+        else:
+            motivo = '<span class="motivo m-open">em andamento</span>'
+        head = (f'<div class="prog-h"><span class="prog-n">Programa {i} {motivo}</span>'
                 f'<span class="muted">início {_data(p["start"].isoformat())} · {fim} · '
-                f'{p["prazo"]} meses{res}{pm}</span></div>')
+                f'{p["prazo"]} meses{res}{pm}</span></div>'
+                + (f'<div class="motivo-det">Encerramento por <b>{rsn[0]}</b> — {rsn[1]}.</div>' if rsn else ''))
         panels.append(f'<div class="card prog-card">{head}<div class="chart-box">{_prog_panel(p, i)}</div></div>')
     return f"""
-  <h2>Execução por programa <span class="h-meta">executado × autorizado · cada um vence no seu prazo</span></h2>
-  <p class="lead">Programas são <b>sequenciais</b> (um de cada vez) e <b>vencem pela data de validade</b> —
-    <b>não precisam atingir o máximo autorizado</b>. A <b>linha verde sólida</b> é o
-    <b>executado oficial</b> do encerramento (o número que vale); a <b>curva verde</b> é a execução
-    diária da tesouraria, que pode estar <b>parcial</b> no mês corrente (o formulário fecha ~dia 10 do mês
-    seguinte). A <b>linha dourada</b> é o teto autorizado, a <b>vertical vermelha</b> a <b>validade</b> nominal
-    e a <b>vertical teal</b> a data em que o programa foi <b>encerrado de fato</b> (ao abrir o seguinte).</p>
+  <h2>Execução por programa <span class="h-meta">executado × autorizado · motivo do encerramento</span></h2>
+  <p class="lead">Programas são <b>sequenciais</b> (um de cada vez) e <b>não precisam atingir o máximo</b>.
+    Cada um encerra por <b>uma de quatro vias</b>: bateu o <b>limite de ações</b>, bateu o <b>limite de valor (R$)</b>,
+    chegou ao <b>fim do prazo</b>, ou foi <b>encerrado antecipadamente pelo Conselho</b> (nenhum teto atingido) — o
+    badge ao lado de cada programa diz qual foi. A <b>linha verde sólida</b> é o <b>executado oficial</b>; a
+    <b>curva verde</b> é a execução diária da tesouraria, que pode estar <b>parcial</b> no mês corrente. A
+    <b>linha dourada</b> é o teto de ações, a <b>vertical vermelha</b> a <b>validade</b> nominal e a
+    <b>vertical teal</b> o <b>encerramento de fato</b>.</p>
   <div class="prog-grid">{''.join(panels)}</div>"""
 
 

@@ -66,8 +66,15 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .prog-grid{display:flex;flex-direction:column;gap:14px;margin-top:14px}
 .prog-card{padding:0}
 .prog-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding:13px 18px 0}
-.prog-n{font:600 13px 'IBM Plex Mono',monospace;color:var(--accent)}
+.prog-n{font:600 13px 'IBM Plex Mono',monospace;color:var(--accent);display:inline-flex;align-items:center;gap:9px}
 .prog-h .muted{font:500 11.5px 'IBM Plex Mono',monospace}
+.motivo{font:600 9.5px 'Inter',sans-serif;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:3px;white-space:nowrap;cursor:default}
+.motivo.m-lim{color:var(--accent);background:rgba(63,167,181,.14);border:1px solid rgba(63,167,181,.35)}
+.motivo.m-prazo{color:var(--sell);background:rgba(224,113,76,.13);border:1px solid rgba(224,113,76,.32)}
+.motivo.m-disc{color:var(--gold);background:rgba(215,180,90,.14);border:1px solid rgba(215,180,90,.34)}
+.motivo.m-open{color:var(--muted);border:1px solid var(--line)}
+.motivo-det{font:500 11.5px 'IBM Plex Mono',monospace;color:var(--muted);padding:6px 18px 0}
+.motivo-det b{color:var(--paper);font-weight:600}
 .tbl .num{text-align:right}
 .tbl .ctr{text-align:center}
 .tbl .strong{font-weight:600}
