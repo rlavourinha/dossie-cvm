@@ -95,6 +95,11 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .motivo.m-open{color:var(--muted);border:1px solid var(--line)}
 .motivo-det{font:500 11.5px 'IBM Plex Mono',monospace;color:var(--muted);padding:6px 18px 0}
 .motivo-det b{color:var(--paper);font-weight:600}
+.recon-note{margin:4px 16px 16px;padding:12px 14px;border-left:3px solid var(--gold);
+  background:rgba(215,180,90,.07);border-radius:0 6px 6px 0;font:400 12.5px 'Inter',sans-serif;
+  line-height:1.55;color:var(--muted)}
+.recon-note b{color:var(--paper);font-weight:600}
+.rn-tag{font:600 9.5px 'Inter',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
 .tbl .num{text-align:right}
 .tbl .ctr{text-align:center}
 .tbl .strong{font-weight:600}

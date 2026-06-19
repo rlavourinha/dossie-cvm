@@ -223,6 +223,58 @@ def _closure_reason(p: dict):
             f"a {sh*100:.0f}% das ações e {val*100:.0f}% do valor)", "disc")
 
 
+_MES_PT = ["", "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+           "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+
+def _market_prices(ticker: str):
+    """Preço diário de fechamento (COTAHIST) em data/precos_<ticker>.csv, se houver."""
+    f = BASE / "data" / f"precos_{ticker}.csv"
+    if not f.exists():
+        return None
+    d = pd.read_csv(f, header=None, names=["data", "preco"])
+    d["data"] = pd.to_datetime(d["data"], errors="coerce").dt.date
+    return d.dropna()
+
+
+def _reconcile_note(p: dict, ticker: str) -> str:
+    """PADRÃO de validação de encerramento: quando o diário rastreado fica abaixo
+    do executado oficial (faltam formulários de tesouraria ainda não publicados),
+    calcula o preço IMPLÍCITO das ações que faltam e confronta com o preço de
+    mercado do período restante. Se o implícito cai na faixa negociada, o número
+    oficial é consistente — e deixamos registrada a expectativa do que o formulário
+    pendente deve mostrar. Retorna '' quando o diário já fecha com o oficial."""
+    ex, dr = p.get("exec"), p.get("exec_real")
+    if not (ex and dr) or not p.get("exec_value") or (ex - dr) <= 0.02 * p["auth"]:
+        return ""
+    miss = ex - dr
+    dval = dr * (p.get("preco_med") or 0)
+    implied = (p["exec_value"] - dval) / miss
+    last_buy = max((d for d, _ in p.get("cum", [])), default=p["start"])
+    end = p.get("end") or p["deadline"]
+    off_avg = p["exec_value"] / ex
+
+    mkt, consist = "", ""
+    mk = _market_prices(ticker)
+    if mk is not None:
+        w = mk[(mk["data"] > last_buy) & (mk["data"] <= end)]
+        if len(w):
+            lo, hi, av = float(w["preco"].min()), float(w["preco"].max()), float(w["preco"].mean())
+            ok = lo <= implied <= hi
+            near = " (perto da mínima do período)" if implied <= lo + 0.25 * (hi - lo) else ""
+            mkt = (f' No período restante a <b>{ticker}</b> negociou <b>R$ {lo:,.2f}–{hi:,.2f}</b> '
+                   f'(média R$ {av:,.2f}); o preço implícito{near} <b>cabe nessa faixa</b>')
+            consist = " — número oficial <b>consistente</b>." if ok else " — <b>fora da faixa; revisar</b>."
+
+    venc = f"{_MES_PT[end.month]}/{end.year}"
+    return (f'<div class="recon-note"><div class="rn-tag">Execução a confirmar · validação por preço</div>'
+            f'Rastreamos <b>{_qtd(dr)}</b> ações ({_preco(p.get("preco_med"))} méd) nos formulários mensais já '
+            f'publicados; o encerramento oficial reporta <b>{_qtd(ex)}</b> ({_preco(off_avg)} méd). As '
+            f'<b>{_qtd(miss)}</b> ações que faltam implicam compra a <b>~{_preco(implied)}</b>.{mkt}{consist} '
+            f'<b>Expectativa:</b> quando o formulário de tesouraria de {venc} for publicado (~dia 10 do mês '
+            f'seguinte), devemos ver ~{_qtd(miss)} ações compradas a ~{_preco(implied)}.</div>')
+
+
 def _prog_panel(p: dict, idx: int) -> str:
     W, H = 720, 150
     padL, padR, padT, padB = 46, 120, 16, 30
@@ -312,7 +364,8 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
                 f'<span class="muted">início {_data(p["start"].isoformat())} · {fim} · '
                 f'{p["prazo"]} meses{res}{pm}</span></div>'
                 + (f'<div class="motivo-det">Encerramento por <b>{rsn[0]}</b> — {rsn[1]}.</div>' if rsn else ''))
-        panels.append(f'<div class="card prog-card">{head}<div class="chart-box">{_prog_panel(p, i)}</div></div>')
+        note = _reconcile_note(p, ticker)
+        panels.append(f'<div class="card prog-card">{head}<div class="chart-box">{_prog_panel(p, i)}</div>{note}</div>')
     return f"""
   <h2>Execução por programa <span class="h-meta">executado × autorizado · motivo do encerramento</span></h2>
   <p class="lead">Programas são <b>sequenciais</b> (um de cada vez) e <b>não precisam atingir o máximo</b>.
