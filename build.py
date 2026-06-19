@@ -237,13 +237,24 @@ def _prog_panel(p: dict, idx: int) -> str:
     cum = p.get("cum")
     daily_end, xe = None, None
     if cum:
-        pts = [(padL, ybot)] + [(x(d), y(c)) for d, c in cum]
-        xe, ye = pts[-1]
+        buy_pts = [(x(d), y(c)) for d, c in cum]
+        xe = buy_pts[-1][0]
         daily_end = cum[-1][1]
-        poly = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
-        s.append(f'<polygon points="{padL},{ybot} {poly} {xe:.1f},{ybot}" fill="rgba(70,185,138,.16)"/>')
+        # As ações compradas ficam EM TESOURARIA até o programa encerrar, então o
+        # acumulado NÃO cai depois da última compra: segue plano até o fim. Só
+        # estendo se o diário está COMPLETO; se ainda é parcial (faltam formulários
+        # não publicados), parar na última compra evita uma reta plana enganosa.
+        complete = (not p.get("exec")) or abs((p.get("exec") or 0) - daily_end) <= 0.02 * p["auth"]
+        line_pts = [(padL, ybot)] + buy_pts
+        if complete:
+            end_x = x(min(p.get("end") or p["deadline"], p["deadline"]))
+            if end_x > xe:
+                line_pts.append((end_x, buy_pts[-1][1]))
+        xlast = line_pts[-1][0]
+        poly = " ".join(f"{px:.1f},{py:.1f}" for px, py in line_pts)
+        s.append(f'<polygon points="{padL},{ybot} {poly} {xlast:.1f},{ybot}" fill="rgba(70,185,138,.16)"/>')
         s.append(f'<polyline points="{poly}" fill="none" stroke="var(--buy)" stroke-width="2"/>')
-        for px, py in pts[1:]:
+        for px, py in buy_pts:
             s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="2.2" fill="var(--buy)"/>')
     # EXECUTADO FINAL (oficial do encerramento = a verdade); o diário é complementar.
     # Sem doc de execução ainda (programa em aberto), cai pro diário acumulado.
@@ -308,7 +319,8 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
     Cada um encerra por <b>uma de quatro vias</b>: bateu o <b>limite de ações</b>, bateu o <b>limite de valor (R$)</b>,
     chegou ao <b>fim do prazo</b>, ou foi <b>encerrado antecipadamente pelo Conselho</b> (nenhum teto atingido) — o
     badge ao lado de cada programa diz qual foi. A <b>linha verde sólida</b> é o <b>executado oficial</b>; a
-    <b>curva verde</b> é a execução diária da tesouraria, que pode estar <b>parcial</b> no mês corrente. A
+    <b>curva verde</b> é a execução diária da tesouraria (segue <b>plana</b> depois da última compra, pois as ações
+    ficam em tesouraria até o programa encerrar) e pode estar <b>parcial</b> no mês corrente. A
     <b>linha dourada</b> é o teto de ações, a <b>vertical vermelha</b> a <b>validade</b> nominal e a
     <b>vertical teal</b> o <b>encerramento de fato</b>.</p>
   <div class="prog-grid">{''.join(panels)}</div>"""
