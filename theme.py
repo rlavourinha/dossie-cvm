@@ -14,6 +14,14 @@ a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
 a:hover{border-bottom-color:var(--accent)}
 
 .kicker{font:600 11px/1 'Inter',sans-serif;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:13px}
+.company-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.cn-lbl{font:600 9.5px 'Inter',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+.navchip{display:inline-flex;align-items:baseline;gap:7px;padding:7px 13px;border:1px solid var(--line);border-radius:7px;
+  font:600 13px 'IBM Plex Mono',monospace;color:var(--muted);transition:.13s}
+.navchip:hover{color:var(--paper);border-color:var(--accent)}
+.navchip.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.navchip .nc-nome{font:500 11px 'Inter',sans-serif;opacity:.75}
+.navchip.on .nc-nome{color:var(--bg)}
 h1{font-family:'Fraunces',serif;font-weight:560;font-size:clamp(28px,5vw,46px);line-height:1.03;letter-spacing:-.01em;margin:0 0 10px}
 h1 .tk{color:var(--accent);font-style:italic}
 .sub{color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center}

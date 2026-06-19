@@ -200,6 +200,14 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         qty = sum(q for d, q, pr in b if pr)
         p["preco_med"] = vol / qty if qty else None
     for p in progs:
+        # executado de EXIBIÇÃO: oficial do encerramento se houver; senão o diário
+        # validado da tesouraria (caso de empresas sem qtd no comunicado, ex. PRIO)
+        p["exec_disp"] = p.get("exec") or p.get("exec_real")
+        ev = p.get("exec_value")
+        if ev is None and p.get("exec_real") and p.get("preco_med"):
+            ev = p["exec_real"] * p["preco_med"]
+        p["exec_value_disp"] = ev
+        p["exec_fonte"] = "oficial" if p.get("exec") else ("tesouraria" if p.get("exec_real") else None)
         p["reason"] = _closure_reason(p)
     return progs
 
@@ -211,12 +219,13 @@ def _closure_reason(p: dict):
     ainda em andamento."""
     if not p.get("end"):
         return None
-    sh = (p.get("exec") or 0) / p["auth"] if p.get("auth") else 0
-    val = (p.get("exec_value") or 0) / p["valor_auth"] if p.get("valor_auth") else 0
+    exq, exv = p.get("exec_disp") or 0, p.get("exec_value_disp") or 0
+    sh = exq / p["auth"] if p.get("auth") else 0
+    val = exv / p["valor_auth"] if p.get("valor_auth") else 0
     if sh >= 0.995:
-        return ("limite de ações", f"executou {_qtd(p['exec'])} de {_qtd(p['auth'])} (100%)", "lim")
+        return ("limite de ações", f"executou {_qtd(exq)} de {_qtd(p['auth'])} (100%)", "lim")
     if val >= 0.995:
-        return ("limite de valor", f"gastou R$ {p['exec_value']/1e6:,.0f} mi de R$ {p['valor_auth']/1e6:,.0f} mi", "lim")
+        return ("limite de valor", f"gastou R$ {exv/1e6:,.0f} mi de R$ {p['valor_auth']/1e6:,.0f} mi", "lim")
     if p["end"] >= p["deadline"] - dt.timedelta(days=7):
         return ("fim do prazo", f"venceu em {_data(p['deadline'].isoformat())} ({p['prazo']} meses)", "prazo")
     return ("decisão do Conselho", f"encerrado antes do prazo (em {_data(p['end'].isoformat())}, "
@@ -387,7 +396,7 @@ def _doclink(url: str, rotulo: str) -> str:
 def _recompra_section(rec: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     progs = _programs(rec, ticker)
     n_prog = len(progs)
-    total_exec = sum((p.get("exec") or 0) for p in progs if p.get("end"))
+    total_exec = sum((p.get("exec_disp") or 0) for p in progs if p.get("end"))
     abertos = [(i, p) for i, p in enumerate(progs, 1) if not p.get("end")]
     fechados = [(i, p) for i, p in enumerate(progs, 1) if p.get("end")]
 
@@ -419,14 +428,16 @@ def _recompra_section(rec: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     # --- programas ENCERRADOS: uma linha resumida cada ---
     rows = []
     for i, p in sorted(fechados, key=lambda t: t[1]["start"], reverse=True):
-        ex = p.get("exec") or 0
+        ex = p.get("exec_disp") or 0
         pct = 100 * ex / p["auth"] if p["auth"] else 0
         rsn = p.get("reason")
         motivo = f'<span class="motivo m-{rsn[2]}">{rsn[0]}</span>' if rsn else "—"
-        preco_off = (p["exec_value"] / ex) if (p.get("exec_value") and ex) else None
-        execu = (f'{_qtd(ex)} <span class="faint">({pct:.0f}%)</span>'
-                 + (f'<br><span class="ag-sub">{_vol(p["exec_value"])} · {_preco(preco_off)} méd</span>'
-                    if p.get("exec_value") else ""))
+        evd = p.get("exec_value_disp")
+        preco_off = (evd / ex) if (evd and ex) else None
+        fonte = ' <span class="faint">(tesouraria)</span>' if p.get("exec_fonte") == "tesouraria" else ""
+        execu = (f'{_qtd(ex)} <span class="faint">({pct:.0f}%)</span>{fonte}'
+                 + (f'<br><span class="ag-sub">{_vol(evd)} · {_preco(preco_off)} méd</span>'
+                    if evd else ""))
         docs = f'{_doclink(p.get("doc_aprov"), "aprov")} · {_doclink(p.get("doc_encer"), "encerr")}'
         rows.append(
             f'<tr><td class="strong">Programa {i}</td>'
@@ -855,6 +866,16 @@ def _timing_section(ticker: str) -> str:
     <div class="tim-leg">{''.join(leg)}</div></div>"""
 
 
+def _company_nav(current: str) -> str:
+    if len(companies.COMPANIES) < 2:
+        return ""
+    chips = "".join(
+        f'<a class="navchip{" on" if tk == current else ""}" href="{tk.lower()}.html">'
+        f'{tk} <span class="nc-nome">{i["nome"]}</span></a>'
+        for tk, i in companies.COMPANIES.items())
+    return f'<nav class="company-nav"><span class="cn-lbl">Empresas</span>{chips}</nav>'
+
+
 def render(ticker: str) -> str:
     info = companies.COMPANIES[ticker]
     rec = pd.read_parquet(BASE / "data" / "recompra.parquet")
@@ -881,6 +902,7 @@ def render(ticker: str) -> str:
 <body><div class="wrap">
   <header>
     <div class="kicker">Dossiê CVM · Recompra &amp; Insiders</div>
+    {_company_nav(ticker)}
     <h1>{info['nome']} · <span class="tk">{ticker}</span></h1>
     <div class="sub"><span>{info['setor']}</span>·
       <span>CNPJ <b>{info['cnpj']}</b></span>·
@@ -897,10 +919,13 @@ def render(ticker: str) -> str:
 
 
 def main():
-    html = render(companies.FOCO)
-    out = OUT / "index.html"
-    out.write_text(html, encoding="utf-8")
-    print(f"[dossie] {out}  ({companies.FOCO})")
+    for tk in companies.COMPANIES:
+        html = render(tk)
+        (OUT / f"{tk.lower()}.html").write_text(html, encoding="utf-8")
+        print(f"[dossie] {tk.lower()}.html  ({tk})")
+    # index = empresa em foco
+    (OUT / "index.html").write_text(render(companies.FOCO), encoding="utf-8")
+    print(f"[dossie] index.html  (foco: {companies.FOCO})")
 
 
 if __name__ == "__main__":
