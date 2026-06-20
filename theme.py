@@ -69,6 +69,7 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .scroll{max-height:540px;overflow-y:auto}
 .scroll .tbl th{position:sticky;top:0;z-index:1}
 .pos{color:var(--buy)} .neg{color:var(--sell)}
+.off-mkt{color:var(--sell);font-weight:600}
 
 /* placar de movimentações */
 .ind-tbl td{vertical-align:top}

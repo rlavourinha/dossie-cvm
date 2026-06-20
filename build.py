@@ -661,12 +661,31 @@ def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     months = sorted(v["data_ref"].astype(str).str[:7].unique())
 
     v["_dm"] = v.get("data_mov").fillna(v["data_ref"]).astype(str)
+    # fechamento de mercado (COTAHIST CRU — mesma escala do preço pago no dia) p/ a
+    # coluna "vs. mercado": preço fora do mercado denuncia strike de opção / erro.
+    pf = BASE / "data" / f"precos_{ticker}.csv"
+    pcs = None
+    if pf.exists():
+        _px = pd.read_csv(pf, header=None, names=["d", "c"])
+        _px["d"] = pd.to_datetime(_px["d"], errors="coerce")
+        pcs = _px.dropna().sort_values("d").set_index("d")["c"]
+
+    def _close_on(dm):
+        if pcs is None or not dm:
+            return None
+        try:
+            cval = pcs.asof(pd.Timestamp(dm))
+            return None if pd.isna(cval) else round(float(cval), 2)
+        except Exception:
+            return None
+
     payload = json.dumps([
         dict(dm=r["_dm"][:10], ym=str(r["data_ref"])[:7], org=_org(r.get("orgao")),
              dir=r["direcao"],
              qty=None if _na(r.get("quantidade")) else float(r["quantidade"]),
              preco=None if _na(r.get("preco")) else float(r["preco"]),
              vol=None if _na(r.get("volume")) else float(r["volume"]),
+             close=_close_on(r["_dm"][:10]),
              grp=_grp(ticker, r.get("especie")))
         for _, r in v.iterrows()], ensure_ascii=False)
 
@@ -676,7 +695,9 @@ def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
   <p class="lead">Compras e vendas <b>à vista</b> de <b>{ticker}</b> declaradas por <b>controlador,
     administradores e tesouraria</b> (Res. CVM 44, art. 11), desde o IPO — exclui empréstimo de ações,
     bonificação e plano de remuneração, que não são negócios de mercado. Acima, o fluxo agregado;
-    abaixo, o <b>filtro</b> separa ações × outros valores mobiliários na tabela detalhada.</p>
+    abaixo, o <b>filtro</b> separa ações × outros valores mobiliários na tabela detalhada. A coluna
+    <b>vs. merc.</b> compara o preço pago com o fechamento do dia — um desvio grande (<span class="off-mkt">⚠</span>)
+    denuncia strike de opção ou preço fora de mercado.</p>
   {_cvm_flow_block(v)}
   <div class="filterbar" style="margin-top:22px">
     <span class="flbl">Valor mobiliário</span>
@@ -688,7 +709,8 @@ def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
   <div class="card" style="margin-top:14px">
     <div class="scroll"><table class="tbl"><thead><tr><th>Negócio</th><th>Órgão</th>
       <th class="hide-sm">Papel</th><th>Operação</th><th class="num">Qtde</th>
-      <th class="num hide-sm">Preço</th><th class="num">Valor</th></tr></thead>
+      <th class="num hide-sm">Preço</th><th class="num hide-sm" title="preço pago vs. fechamento do dia">vs. merc.</th>
+      <th class="num">Valor</th></tr></thead>
       <tbody id="cvm-rows"></tbody></table></div>
   </div>
 {_CVM_JS.replace("__CVMDATA__", payload)}"""
@@ -706,6 +728,13 @@ _CVM_JS = r"""<script>(()=>{
     a>=1e9?'R$ '+(v/1e9).toFixed(2)+' bi':a>=1e6?'R$ '+(v/1e6).toFixed(1)+' mi':
     a>=1e3?'R$ '+Math.round(v/1e3).toLocaleString('en-US')+' mil':'R$ '+Math.round(v).toLocaleString('en-US');
     return (sg&&v>0?'+':'')+s;};
+  // preço pago vs. fechamento do dia — desvio grande denuncia strike de opção/erro
+  const difCell=r=>{
+    // só compara AÇÕES com o preço da ação; 'Outros' (debênture etc.) não tem sentido
+    if(r.preco==null||!r.close||r.grp==='Outros') return '<td class="num hide-sm faint">—</td>';
+    const d=(r.preco/r.close-1)*100, off=Math.abs(d)>8;
+    return `<td class="num hide-sm${off?' off-mkt':' faint'}" title="fech. R$ ${r.close.toFixed(2)}">${(d>0?'+':'')+d.toFixed(1)}%${off?' ⚠':''}</td>`;
+  };
   function render(g){
     const rows=g==='todos'?DATA:DATA.filter(r=>r.grp===g);
     let vol=0; rows.forEach(r=>{vol+=(r.vol||0);});
@@ -714,8 +743,8 @@ _CVM_JS = r"""<script>(()=>{
       const cls=r.dir==='compra'?'b-compra':'b-venda';
       return `<tr><td class="muted">${fmtD(r.dm)}</td><td>${r.org}</td><td class="muted hide-sm">${r.grp}</td>`+
         `<td><span class="badge ${cls}">${r.dir==='compra'?'COMPRA':'VENDA'}</span></td>`+
-        `<td class="num">${fmtN(r.qty)}</td><td class="num hide-sm">${fmtP(r.preco)}</td><td class="num strong">${fmtBRL(r.vol)}</td></tr>`;
-    }).join('')||'<tr><td colspan=7 class=muted>Sem movimentações neste filtro.</td></tr>';
+        `<td class="num">${fmtN(r.qty)}</td><td class="num hide-sm">${fmtP(r.preco)}</td>${difCell(r)}<td class="num strong">${fmtBRL(r.vol)}</td></tr>`;
+    }).join('')||'<tr><td colspan=8 class=muted>Sem movimentações neste filtro.</td></tr>';
     document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.g===g));
   }
   document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>render(b.dataset.g)));
