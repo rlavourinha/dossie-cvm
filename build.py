@@ -938,24 +938,28 @@ def _timing_section(ticker: str) -> str:
     <b>aproveita as quedas</b>. O percentil mostra em quantos pregões da janela o papel esteve <i>mais barato</i>
     que o preço médio pago.</p>
   <div class="card"><div class="chart-box">{''.join(s)}
-    <div class="zoom-hint">role para dar <b>zoom</b> · arraste para mover · 2 cliques reseta</div></div>
+    <div class="zoom-ctrl">
+      <button type="button" data-z="out" aria-label="menos zoom">−</button>
+      <button type="button" data-z="in" aria-label="mais zoom">+</button>
+      <button type="button" data-z="reset" aria-label="resetar zoom">⟲</button>
+    </div>
+    <div class="zoom-hint">zoom: <b>+ / −</b> ou scroll · arraste para mover</div></div>
     <div class="tim-leg">{''.join(leg)}</div></div>
 {_ZOOM_JS.replace("__ID__", "tim-svg")}"""
 
 
 _ZOOM_JS = r"""<script>(()=>{
   const svg=document.getElementById('__ID__'); if(!svg) return;
-  const b=svg.viewBox.baseVal, O={x:b.x,y:b.y,w:b.width,h:b.height};
-  const V={...O};
+  const b=svg.viewBox.baseVal, O={x:b.x,y:b.y,w:b.width,h:b.height}, V={...O};
   const apply=()=>svg.setAttribute('viewBox',`${V.x} ${V.y} ${V.w} ${V.h}`);
   const clamp=()=>{V.w=Math.min(V.w,O.w);V.h=Math.min(V.h,O.h);
     V.x=Math.max(O.x,Math.min(V.x,O.x+O.w-V.w));V.y=Math.max(O.y,Math.min(V.y,O.y+O.h-V.h));};
+  function zoom(f,cx,cy){const nw=V.w*f,nh=V.h*f;
+    V.x=cx-(cx-V.x)*(nw/V.w); V.y=cy-(cy-V.y)*(nh/V.h); V.w=nw; V.h=nh; clamp(); apply();}
+  const reset=()=>{Object.assign(V,O); apply();};
   const at=e=>{const r=svg.getBoundingClientRect();
-    return {x:V.x+(e.clientX-r.left)/r.width*V.w, y:V.y+(e.clientY-r.top)/r.height*V.h};};
-  svg.addEventListener('wheel',e=>{e.preventDefault();const p=at(e),
-    f=e.deltaY<0?0.84:1/0.84, nw=V.w*f, nh=V.h*f;
-    V.x=p.x-(p.x-V.x)*(nw/V.w); V.y=p.y-(p.y-V.y)*(nh/V.h); V.w=nw; V.h=nh; clamp(); apply();
-  },{passive:false});
+    return [V.x+(e.clientX-r.left)/r.width*V.w, V.y+(e.clientY-r.top)/r.height*V.h];};
+  svg.addEventListener('wheel',e=>{e.preventDefault(); zoom(e.deltaY<0?0.84:1/0.84, ...at(e));},{passive:false});
   let d=null;
   svg.addEventListener('pointerdown',e=>{d={x:e.clientX,y:e.clientY,vx:V.x,vy:V.y};
     svg.setPointerCapture(e.pointerId); svg.style.cursor='grabbing';});
@@ -963,7 +967,12 @@ _ZOOM_JS = r"""<script>(()=>{
     V.x=d.vx-(e.clientX-d.x)/r.width*V.w; V.y=d.vy-(e.clientY-d.y)/r.height*V.h; clamp(); apply();});
   const up=()=>{d=null; svg.style.cursor='';};
   svg.addEventListener('pointerup',up); svg.addEventListener('pointercancel',up);
-  svg.addEventListener('dblclick',()=>{Object.assign(V,O); apply();});
+  svg.addEventListener('dblclick',()=>reset());
+  const box=svg.closest('.chart-box');
+  box && box.querySelectorAll('[data-z]').forEach(btn=>btn.addEventListener('click',()=>{
+    const k=btn.dataset.z, cx=V.x+V.w/2, cy=V.y+V.h/2;
+    if(k==='reset') reset(); else zoom(k==='in'?0.7:1/0.7, cx, cy);
+  }));
 })();</script>"""
 
 

@@ -45,9 +45,15 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .chart-box svg{width:100%;height:auto;display:block}
 .zoomable{cursor:grab;touch-action:none}
 .zoomable:active{cursor:grabbing}
-.zoom-hint{position:absolute;right:22px;top:10px;font:500 10px 'IBM Plex Mono',monospace;
+.zoom-hint{position:absolute;left:22px;bottom:10px;font:500 10px 'IBM Plex Mono',monospace;
   color:var(--faint);pointer-events:none;opacity:.75}
 .zoom-hint b{color:var(--muted)}
+.zoom-ctrl{position:absolute;right:14px;top:12px;display:flex;gap:5px;z-index:2}
+.zoom-ctrl button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;background:var(--panel2);color:var(--paper);border:1px solid var(--line);
+  border-radius:6px;font:600 17px/1 'IBM Plex Mono',monospace;transition:.12s;-webkit-user-select:none;user-select:none}
+.zoom-ctrl button:hover{border-color:var(--accent);color:var(--accent)}
+.zoom-ctrl button:active{background:var(--accent);color:var(--bg)}
 .svg-zero{stroke:var(--faint);stroke-width:1}
 .svg-tkr{fill:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600}
 .svg-val{fill:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px}
