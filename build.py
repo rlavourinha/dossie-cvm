@@ -386,6 +386,12 @@ def _prog_panel(p: dict, idx: int) -> str:
         xc = x(end)
         s.append(f'<line x1="{xc:.1f}" y1="{ytop-6:.1f}" x2="{xc:.1f}" y2="{ybot+4:.1f}" stroke="var(--accent)" stroke-width="1.4"/>')
         s.append(f'<text class="svg-axis" x="{xc:.1f}" y="{ytop-9:.1f}" text-anchor="middle" fill="var(--accent)">encerrado {_data(end.isoformat())}</text>')
+    # vertical de HOJE — só no programa EM ANDAMENTO, p/ situar onde estamos no prazo
+    hoje = dt.date.today()
+    if not p.get("end") and p["start"] <= hoje <= p["deadline"]:
+        xh = x(hoje)
+        s.append(f'<line x1="{xh:.1f}" y1="{ytop-6:.1f}" x2="{xh:.1f}" y2="{ybot+4:.1f}" stroke="var(--paper)" stroke-width="1.1" stroke-dasharray="2 3" opacity=".65"/>')
+        s.append(f'<text class="svg-axis" x="{xh:.1f}" y="{ytop-9:.1f}" text-anchor="middle" fill="var(--paper)" opacity=".85">hoje {_data(hoje.isoformat())}</text>')
     # eixo y: 0 e máx
     s.append(f'<text class="svg-axis" x="{padL-7}" y="{ybot+4:.1f}" text-anchor="end">0</text>')
     s.append(f'<text class="svg-axis" x="{padL-7}" y="{ytop+4:.1f}" text-anchor="end">{p["auth"]/1e6:.0f}M</text>')
