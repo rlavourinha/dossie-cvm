@@ -1025,9 +1025,10 @@ def _treasury_saldo(ticker: str):
     return d if d and d.get("saldo") else None
 
 
-def _treasury_hist_section(ticker: str) -> str:
+def _treasury_hist_section(ticker: str, rec: pd.DataFrame) -> str:
     """Saldo de Ações em Tesouraria (R$) do balanço (DFP anual + ITR trimestral),
-    conta 2.03.02.05 — a série MAIS LONGA disponível (desde 2010 p/ VALE/PRIO)."""
+    conta 2.03.02.05 — a série MAIS LONGA disponível (desde 2010 p/ VALE/PRIO).
+    Marca os CANCELAMENTOS (linhas verticais) — as quedas da série."""
     f = BASE / "data" / "tesouraria_hist.csv"
     if not f.exists():
         return ""
@@ -1035,6 +1036,12 @@ def _treasury_hist_section(ticker: str) -> str:
     h = h[h["ticker"] == ticker].copy()
     if len(h) < 2:
         return ""
+    cancs = []
+    if "qtd_cancelada" in rec.columns:
+        cr = rec[(rec["tipo"] == "cancelamento") & rec["qtd_cancelada"].notna()]
+        cr = cr.drop_duplicates("qtd_cancelada")
+        cancs = [(_date_obj(str(d)[:10]), float(q)) for d, q in zip(cr["data_entrega"], cr["qtd_cancelada"])]
+        cancs = [(d, q) for d, q in cancs if d]
     h["d"] = pd.to_datetime(h["data"], errors="coerce").dt.date
     h = h.dropna(subset=["d"]).sort_values("d")
     pts = [(d, v / 1e9) for d, v in zip(h["d"], h["saldo_rs"])]
@@ -1059,12 +1066,23 @@ def _treasury_hist_section(ticker: str) -> str:
     s.append(f'<polyline points="{poly}" fill="none" stroke="var(--accent)" stroke-width="2"/>')
     dd, vv = pts[-1]
     s.append(f'<circle cx="{x(dd):.1f}" cy="{y(vv):.1f}" r="3" fill="var(--accent)"/>')
-    s.append(f'<text class="svg-bm" x="{padL}" y="{padT-7}">ações em tesouraria · R$ bi (custo no balanço)</text></svg>')
+    # CANCELAMENTOS: linha vertical vermelha na data, com o tamanho cancelado.
+    # Rótulos alternam em 2 níveis verticais p/ não colidir quando estão próximos.
+    vis = [(cd, cq) for cd, cq in sorted(cancs) if d0 <= cd <= d1]
+    for i, (cd, cq) in enumerate(vis):
+        xc = x(cd)
+        s.append(f'<line x1="{xc:.1f}" y1="{yt+2:.1f}" x2="{xc:.1f}" y2="{yb:.1f}" stroke="var(--sell)" stroke-width="1.3" stroke-dasharray="4 3" opacity=".85"/>')
+        lbl = f"−{cq/1e6:,.0f}M" if cq < 1e9 else f"−{cq/1e9:,.1f}bi"
+        ly = yt + 1 if i % 2 == 0 else yt + 12
+        s.append(f'<text x="{xc:.1f}" y="{ly:.1f}" text-anchor="middle" fill="var(--sell)" '
+                 f'font-family="\'IBM Plex Mono\',monospace" font-size="9" font-weight="600">{lbl}</text>')
+    s.append(f'<text class="svg-bm" x="{padL}" y="{padT-7}">ações em tesouraria · R$ bi (custo no balanço) · <tspan fill="var(--sell)">▏</tspan> cancelamento</text></svg>')
     peak = max(pts, key=lambda t: t[1])
     return f"""
   <h2>Ações em tesouraria no tempo <span class="h-meta">DFP + ITR · {d0.year}–{d1.year}</span></h2>
   <p class="lead">Saldo de <b>ações em tesouraria</b> (custo, R$) no balanço — <b>DFP anual + ITR trimestral</b>,
-    a série <b>mais longa</b> disponível. Sobe com a recompra, cai com cancelamento/alienação. Pico de
+    a série <b>mais longa</b> disponível. Sobe com a recompra; as <b style="color:var(--sell)">verticais vermelhas</b>
+    marcam os <b>cancelamentos</b> de ações em tesouraria (as quedas). Pico de
     <b>R$ {peak[1]:,.1f} bi</b> em {_data(peak[0].isoformat())}; hoje <b>R$ {vv:,.1f} bi</b>.</p>
   <div class="card"><div class="chart-box">{''.join(s)}</div></div>"""
 
@@ -1091,7 +1109,7 @@ def render(ticker: str) -> str:
     cvm_body, ck = _cvm44_section(cvm, ticker)
     ind_body = _indicators_section(cvm, ticker)
     tim_body = _timing_section(ticker)
-    tes_hist = _treasury_hist_section(ticker)
+    tes_hist = _treasury_hist_section(ticker, rec)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
     ts = _treasury_saldo(ticker)
     _tes_html = (f'<span>Tesouraria <b>{_qtd(ts["saldo"])}</b> ações '
