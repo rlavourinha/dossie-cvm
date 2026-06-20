@@ -200,17 +200,15 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         qty = sum(q for d, q, pr in b if pr)
         p["preco_med"] = vol / qty if qty else None
     for p in progs:
-        # executado de EXIBIÇÃO: oficial do encerramento se houver; senão o diário
-        # validado da tesouraria (caso de empresas sem qtd no comunicado, ex. PRIO).
-        # NUNCA pode exceder o autorizado — a janela diária pode super-atribuir alguns
-        # dias na virada de um programa para o outro; limitamos ao teto (limite atingido).
-        disp = p.get("exec") or p.get("exec_real")
-        if disp and p.get("auth"):
-            disp = min(disp, p["auth"])
-        p["exec_disp"] = disp
+        # executado de EXIBIÇÃO: OFICIAL do comunicado se houver (a verdade); senão o
+        # diário validado da tesouraria. ATENÇÃO: o formulário "Posição Individual" da
+        # CVM é multi-entidade (Cia + Controladas + Coligadas) e cross-lista o mesmo
+        # negócio — o diário pode super-contar (ex. VALE Prog 2: 293M vs 270M oficial).
+        # Por isso o oficial tem prioridade absoluta sobre o diário.
+        p["exec_disp"] = p.get("exec") or p.get("exec_real")
         ev = p.get("exec_value")
         if ev is None and p.get("exec_real") and p.get("preco_med"):
-            ev = min(p["exec_real"], p["auth"]) * p["preco_med"] if p.get("auth") else p["exec_real"] * p["preco_med"]
+            ev = p["exec_real"] * p["preco_med"]
         p["exec_value_disp"] = ev
         p["exec_fonte"] = "oficial" if p.get("exec") else ("tesouraria" if p.get("exec_real") else None)
         p["reason"] = _closure_reason(p)
@@ -346,10 +344,12 @@ def _prog_panel(p: dict, idx: int) -> str:
     s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Execução do programa {idx}">']
     # eixo base
     s.append(f'<line class="svg-zero" x1="{padL}" y1="{ybot}" x2="{x(p["deadline"]):.1f}" y2="{ybot}"/>')
-    # execução observada DIA A DIA (tesouraria) — pode estar incompleta no mês corrente
+    # execução observada DIA A DIA (tesouraria) — pode estar incompleta no mês corrente.
+    # Quando há executado OFICIAL menor que o diário (diário super-conta por multi-
+    # entidade, ex. VALE), ancora a curva no oficial — é a verdade, não um teto cego.
     cum = p.get("cum")
-    if cum and p.get("auth"):
-        cum = [(d, min(c, p["auth"])) for d, c in cum]   # não pode exceder o teto
+    if cum and p.get("exec"):
+        cum = [(d, min(c, p["exec"])) for d, c in cum]
     daily_end, xe = None, None
     if cum:
         buy_pts = [(x(d), y(c)) for d, c in cum]
