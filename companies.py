@@ -14,6 +14,11 @@ COMPANIES = {
         "setor": "Petróleo & Gás · E&P",
         "cnpj": "10.629.105/0001-68",
     },
+    "VALE3": {
+        "nome": "Vale S.A.",
+        "setor": "Mineração · Minério de ferro",
+        "cnpj": "33.592.510/0001-54",
+    },
 }
 
 # Empresa em foco no v1 (a primeira da lista quando houver mais).

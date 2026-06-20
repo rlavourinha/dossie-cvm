@@ -661,9 +661,12 @@ def _cvm_flow_block(v: pd.DataFrame) -> str:
 def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     import json
     v = v.copy()
-    sign = v["direcao"].map({"compra": 1, "venda": -1}).fillna(0)
-    net = float((v["volume"].fillna(0) * sign).sum())
-    vol = float(v["volume"].fillna(0).sum())
+    # KPIs no fluxo À VISTA (mercado) — o "todos os movimentos" é poluído por
+    # empréstimo de ações (locador), enorme em empresas como a Vale.
+    av = _cvm_avista(v)
+    net = float(av["sv"].sum()) if len(av) else 0.0
+    vol = float(av["volume"].fillna(0).sum()) if len(av) else 0.0
+    n_av = len(av)
     months = sorted(v["data_ref"].astype(str).str[:7].unique())
 
     v["_dm"] = v.get("data_mov").fillna(v["data_ref"]).astype(str)
@@ -720,7 +723,7 @@ def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
       <tbody id="cvm-rows"></tbody></table></div>
   </div>
 {_CVM_JS.replace("__CVMDATA__", payload)}"""
-    return body, {"net": net, "vol": vol, "n": len(v)}
+    return body, {"net": net, "vol": vol, "n": n_av}
 
 
 # JS do filtro CVM 44 (string normal, não f-string — recalcula gráfico/stats/tabela)
@@ -1051,8 +1054,8 @@ def render(ticker: str) -> str:
   <section class="kpis">
     <div class="kpi"><div class="lbl">Programas de recompra</div><div class="val">{rk['n_prog']}</div><div class="foot">aprovados</div></div>
     <div class="kpi"><div class="lbl">Ações recompradas</div><div class="val acc">{_qtd(rk['total_exec'])}</div><div class="foot">executado · concluídos</div></div>
-    <div class="kpi"><div class="lbl">Fluxo CVM 44 líquido</div><div class="val {'pos' if ck['net']>=0 else 'neg'}">{_brl(ck['net'],True)}</div><div class="foot">compras − vendas</div></div>
-    <div class="kpi"><div class="lbl">Volume CVM 44</div><div class="val">{_brl(ck['vol'])}</div><div class="foot">{ck['n']} movimentos</div></div>
+    <div class="kpi"><div class="lbl">Fluxo CVM 44 líquido</div><div class="val {'pos' if ck['net']>=0 else 'neg'}">{_brl(ck['net'],True)}</div><div class="foot">à vista · compras − vendas</div></div>
+    <div class="kpi"><div class="lbl">Volume CVM 44</div><div class="val">{_brl(ck['vol'])}</div><div class="foot">à vista · {ck['n']} negócios</div></div>
   </section>"""
 
     return f"""<!doctype html><html lang="pt-BR">{theme.head(f"{ticker} · Recompra & CVM 44")}
