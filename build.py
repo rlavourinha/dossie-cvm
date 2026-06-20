@@ -201,11 +201,16 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         p["preco_med"] = vol / qty if qty else None
     for p in progs:
         # executado de EXIBIÇÃO: oficial do encerramento se houver; senão o diário
-        # validado da tesouraria (caso de empresas sem qtd no comunicado, ex. PRIO)
-        p["exec_disp"] = p.get("exec") or p.get("exec_real")
+        # validado da tesouraria (caso de empresas sem qtd no comunicado, ex. PRIO).
+        # NUNCA pode exceder o autorizado — a janela diária pode super-atribuir alguns
+        # dias na virada de um programa para o outro; limitamos ao teto (limite atingido).
+        disp = p.get("exec") or p.get("exec_real")
+        if disp and p.get("auth"):
+            disp = min(disp, p["auth"])
+        p["exec_disp"] = disp
         ev = p.get("exec_value")
         if ev is None and p.get("exec_real") and p.get("preco_med"):
-            ev = p["exec_real"] * p["preco_med"]
+            ev = min(p["exec_real"], p["auth"]) * p["preco_med"] if p.get("auth") else p["exec_real"] * p["preco_med"]
         p["exec_value_disp"] = ev
         p["exec_fonte"] = "oficial" if p.get("exec") else ("tesouraria" if p.get("exec_real") else None)
         p["reason"] = _closure_reason(p)
@@ -343,6 +348,8 @@ def _prog_panel(p: dict, idx: int) -> str:
     s.append(f'<line class="svg-zero" x1="{padL}" y1="{ybot}" x2="{x(p["deadline"]):.1f}" y2="{ybot}"/>')
     # execução observada DIA A DIA (tesouraria) — pode estar incompleta no mês corrente
     cum = p.get("cum")
+    if cum and p.get("auth"):
+        cum = [(d, min(c, p["auth"])) for d, c in cum]   # não pode exceder o teto
     daily_end, xe = None, None
     if cum:
         buy_pts = [(x(d), y(c)) for d, c in cum]
@@ -374,9 +381,11 @@ def _prog_panel(p: dict, idx: int) -> str:
         # diário ainda parcial (faltam formulários do mês corrente)
         if daily_end and final - daily_end > 0.02 * p["auth"] and xe is not None:
             s.append(f'<text class="svg-val" x="{xe+6:.1f}" y="{y(daily_end)+4:.1f}" fill="var(--muted)">diário {_qtd(daily_end)} · parcial</text>')
-    # linha do MÁXIMO autorizado (teto) — o programa NÃO precisa chegar nela
+    # linha do MÁXIMO autorizado (teto) — o programa NÃO precisa chegar nela. Quando
+    # o executado coincide com o teto (limite atingido), sobe o rótulo p/ não colidir.
     s.append(f'<line x1="{padL}" y1="{ytop:.1f}" x2="{x(p["deadline"]):.1f}" y2="{ytop:.1f}" stroke="var(--gold)" stroke-width="1.3" stroke-dasharray="5 4"/>')
-    s.append(f'<text class="svg-val" x="{x(p["deadline"])+6:.1f}" y="{ytop+4:.1f}" fill="var(--gold)">máx {_qtd(p["auth"])}</text>')
+    maxy = ytop - 6 if (final and abs(y(final) - ytop) < 9) else ytop + 4
+    s.append(f'<text class="svg-val" x="{x(p["deadline"])+6:.1f}" y="{maxy:.1f}" fill="var(--gold)">máx {_qtd(p["auth"])}</text>')
     # vertical da VALIDADE nominal (vence aqui se não for encerrado antes)
     s.append(f'<line x1="{x(p["deadline"]):.1f}" y1="{ytop-6:.1f}" x2="{x(p["deadline"]):.1f}" y2="{ybot+4:.1f}" stroke="var(--sell)" stroke-width="1.2" stroke-dasharray="4 4"/>')
     s.append(f'<text class="svg-axis" x="{x(p["deadline"]):.1f}" y="{ybot+18:.1f}" text-anchor="middle" fill="var(--sell)">validade {_data(p["deadline"].isoformat())}</text>')
@@ -407,7 +416,7 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
     panels = []
     for i, p in enumerate(progs, 1):
         pm = f' · preço médio {_preco(p["preco_med"])}' if p.get("preco_med") else ""
-        final = p.get("exec") or p.get("exec_real")
+        final = p.get("exec_disp")   # já limitado ao teto autorizado
         if final:
             pct = 100 * final / p["auth"] if p["auth"] else 0
             res = f' · executou <b>{_qtd(final)}</b> de {_qtd(p["auth"])} ({pct:.0f}%)'
