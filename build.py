@@ -650,8 +650,9 @@ def _cvm_flow_block(v: pd.DataFrame) -> str:
     cap = " · ".join(
         f'<span class="cvm-net"><span class="tim-dot" style="background:{c}"></span>{g} '
         f'<b>{_signmi(a[a["grp"]==g]["sv"].sum()/1e6)}</b></span>' for g, c in _CVM_GRP)
+    ini = _mes(a["dt"].min().isoformat()[:7])
     return f"""
-  <p class="substats" style="margin:14px 2px 4px">Fluxo à vista (mercado), líquido desde o IPO:
+  <p class="substats" style="margin:14px 2px 4px">Fluxo à vista (mercado), líquido desde {ini}:
     {cap} · <span class="muted">{len(a)} negócios</span></p>
   <div class="card"><div class="chart-box">{_cvm_cum_svg(a)}</div></div>
   <div class="card" style="margin-top:12px"><div class="chart-box">{_cvm_year_svg(a)}</div>
@@ -702,7 +703,8 @@ def _cvm44_section(v: pd.DataFrame, ticker: str) -> tuple[str, dict]:
     body = f"""
   <h2>Movimentações CVM 44 <span class="h-meta">Res. 44 art. 11 · VLMO · {_mes(months[0])}–{_mes(months[-1])}</span></h2>
   <p class="lead">Compras e vendas <b>à vista</b> de <b>{ticker}</b> declaradas por <b>controlador,
-    administradores e tesouraria</b> (Res. CVM 44, art. 11), desde o IPO — exclui empréstimo de ações,
+    administradores e tesouraria</b> (Res. CVM 44, art. 11), desde <b>{_mes(months[0])}</b>
+    (início da série VLMO) — exclui empréstimo de ações,
     bonificação e plano de remuneração, que não são negócios de mercado. Acima, o fluxo agregado;
     abaixo, o <b>filtro</b> separa ações × outros valores mobiliários na tabela detalhada. A coluna
     <b>vs. merc.</b> compara o preço pago com o fechamento do dia — um desvio grande (<span class="off-mkt">⚠</span>)
