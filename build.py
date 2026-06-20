@@ -1025,6 +1025,50 @@ def _treasury_saldo(ticker: str):
     return d if d and d.get("saldo") else None
 
 
+def _treasury_hist_section(ticker: str) -> str:
+    """Saldo de Ações em Tesouraria (R$) do balanço (DFP anual + ITR trimestral),
+    conta 2.03.02.05 — a série MAIS LONGA disponível (desde 2010 p/ VALE/PRIO)."""
+    f = BASE / "data" / "tesouraria_hist.csv"
+    if not f.exists():
+        return ""
+    h = pd.read_csv(f)
+    h = h[h["ticker"] == ticker].copy()
+    if len(h) < 2:
+        return ""
+    h["d"] = pd.to_datetime(h["data"], errors="coerce").dt.date
+    h = h.dropna(subset=["d"]).sort_values("d")
+    pts = [(d, v / 1e9) for d, v in zip(h["d"], h["saldo_rs"])]
+    W, H, padL, padR, padT, padB = 960, 230, 52, 16, 20, 32
+    xr, yb, yt = W - padR, H - padB, padT
+    d0, d1 = pts[0][0], pts[-1][0]
+    span = max((d1 - d0).days, 1)
+    vmax = max(v for _, v in pts) or 1
+    x = lambda d: padL + (d - d0).days / span * (xr - padL)
+    y = lambda v: yb - v / vmax * (yb - yt)
+    s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Ações em tesouraria ao longo do tempo">']
+    dec = 1 if vmax < 10 else 0
+    for t in _ticks(0, vmax):
+        s.append(f'<line x1="{padL}" y1="{y(t):.1f}" x2="{xr}" y2="{y(t):.1f}" stroke="var(--line)" stroke-width="1" opacity=".4"/>')
+        s.append(f'<text class="svg-axis" x="{padL-7}" y="{y(t)+3:.1f}" text-anchor="end">{t:.{dec}f}</text>')
+    for yr in range(d0.year + 1, d1.year + 1):
+        xa = x(dt.date(yr, 1, 1))
+        s.append(f'<line x1="{xa:.1f}" y1="{yt}" x2="{xa:.1f}" y2="{yb}" stroke="var(--line)" stroke-width="1" opacity=".25"/>')
+        s.append(f'<text class="svg-axis" x="{xa:.1f}" y="{yb+15:.1f}" text-anchor="middle">{"’" + str(yr)[2:]}</text>')
+    poly = " ".join(f"{x(d):.1f},{y(v):.1f}" for d, v in pts)
+    s.append(f'<polygon points="{padL},{yb} {poly} {x(d1):.1f},{yb}" fill="rgba(63,167,181,.14)"/>')
+    s.append(f'<polyline points="{poly}" fill="none" stroke="var(--accent)" stroke-width="2"/>')
+    dd, vv = pts[-1]
+    s.append(f'<circle cx="{x(dd):.1f}" cy="{y(vv):.1f}" r="3" fill="var(--accent)"/>')
+    s.append(f'<text class="svg-bm" x="{padL}" y="{padT-7}">ações em tesouraria · R$ bi (custo no balanço)</text></svg>')
+    peak = max(pts, key=lambda t: t[1])
+    return f"""
+  <h2>Ações em tesouraria no tempo <span class="h-meta">DFP + ITR · {d0.year}–{d1.year}</span></h2>
+  <p class="lead">Saldo de <b>ações em tesouraria</b> (custo, R$) no balanço — <b>DFP anual + ITR trimestral</b>,
+    a série <b>mais longa</b> disponível. Sobe com a recompra, cai com cancelamento/alienação. Pico de
+    <b>R$ {peak[1]:,.1f} bi</b> em {_data(peak[0].isoformat())}; hoje <b>R$ {vv:,.1f} bi</b>.</p>
+  <div class="card"><div class="chart-box">{''.join(s)}</div></div>"""
+
+
 def _company_nav(current: str) -> str:
     if len(companies.COMPANIES) < 2:
         return ""
@@ -1047,6 +1091,7 @@ def render(ticker: str) -> str:
     cvm_body, ck = _cvm44_section(cvm, ticker)
     ind_body = _indicators_section(cvm, ticker)
     tim_body = _timing_section(ticker)
+    tes_hist = _treasury_hist_section(ticker)
     gerado = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
     ts = _treasury_saldo(ticker)
     _tes_html = (f'<span>Tesouraria <b>{_qtd(ts["saldo"])}</b> ações '
@@ -1074,9 +1119,10 @@ def render(ticker: str) -> str:
   {ind_body}
   {rec_body}
   {prog_body}
+  {tes_hist}
   {cvm_body}
   {tim_body}
-  <footer><span>dossiê CVM · recompra + CVM 44 (art. 11)</span><span>fonte: comunicados IPE &amp; VLMO da CVM · {gerado}</span></footer>
+  <footer><span>dossiê CVM · recompra + CVM 44 (art. 11) · saldo de tesouraria DFP/ITR</span><span>fonte: IPE, VLMO, DFP &amp; ITR da CVM · {gerado}</span></footer>
 </div></body></html>"""
 
 
