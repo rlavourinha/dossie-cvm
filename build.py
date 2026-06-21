@@ -344,12 +344,8 @@ def _prog_panel(p: dict, idx: int) -> str:
     s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Execução do programa {idx}">']
     # eixo base
     s.append(f'<line class="svg-zero" x1="{padL}" y1="{ybot}" x2="{x(p["deadline"]):.1f}" y2="{ybot}"/>')
-    # execução observada DIA A DIA (tesouraria) — pode estar incompleta no mês corrente.
-    # Quando há executado OFICIAL menor que o diário (diário super-conta por multi-
-    # entidade, ex. VALE), ancora a curva no oficial — é a verdade, não um teto cego.
+    # execução observada DIA A DIA (tesouraria) — pode estar incompleta no mês corrente
     cum = p.get("cum")
-    if cum and p.get("exec"):
-        cum = [(d, min(c, p["exec"])) for d, c in cum]
     daily_end, xe = None, None
     if cum:
         buy_pts = [(x(d), y(c)) for d, c in cum]
