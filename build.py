@@ -1052,7 +1052,20 @@ def _treasury_hist_section(ticker: str, rec: pd.DataFrame) -> str:
     pts = [(d, v / 1e9) for d, v in zip(h["d"], h["saldo_rs"])]
     W, H, padL, padR, padT, padB = 960, 230, 52, 16, 20, 32
     xr, yb, yt = W - padR, H - padB, padT
-    d0, d1 = pts[0][0], pts[-1][0]
+    # CANCELAMENTOS futuros (aprovados em Fato Relevante, ainda sem ITR): projeta
+    # a queda da tesouraria pelo custo médio (saldo R$ / nº ações em tesouraria),
+    # tracejado, até o formulário trimestral confirmar.
+    ts = _treasury_saldo(ticker)
+    sh = ts.get("saldo") if ts else None
+    future = sorted((cd, cq) for cd, cq in cancs if cd > pts[-1][0])
+    proj = []
+    if future and sh:
+        prev = pts[-1][1]
+        for cd, cq in future:
+            prev = max(prev * (1 - cq / sh), 0.0)
+            proj.append((cd, prev))
+    d0 = pts[0][0]
+    d1 = max([pts[-1][0]] + [cd for cd, _ in future])
     span = max((d1 - d0).days, 1)
     vmax = max(v for _, v in pts) or 1
     x = lambda d: padL + (d - d0).days / span * (xr - padL)
@@ -1071,6 +1084,22 @@ def _treasury_hist_section(ticker: str, rec: pd.DataFrame) -> str:
     s.append(f'<polyline points="{poly}" fill="none" stroke="var(--accent)" stroke-width="2"/>')
     dd, vv = pts[-1]
     s.append(f'<circle cx="{x(dd):.1f}" cy="{y(vv):.1f}" r="3" fill="var(--accent)"/>')
+    # PROJEÇÃO tracejada da queda por cancelamento aprovado (FR), até o ITR sair:
+    # mantém o último valor até a data e desce o custo médio das ações canceladas.
+    if proj:
+        pv, prev = [pts[-1]], pts[-1][1]
+        for cd, rs in proj:
+            pv += [(cd, prev), (cd, rs)]
+            prev = rs
+        pl = " ".join(f"{x(d):.1f},{y(v):.1f}" for d, v in pv)
+        s.append(f'<polyline points="{pl}" fill="none" stroke="var(--accent)" '
+                 f'stroke-width="1.6" stroke-dasharray="5 4" opacity=".6"/>')
+        ed, ev = proj[-1]
+        s.append(f'<circle cx="{x(ed):.1f}" cy="{y(ev):.1f}" r="3.2" fill="var(--panel)" '
+                 f'stroke="var(--accent)" stroke-width="1.6"/>')
+        s.append(f'<text x="{x(ed)-6:.1f}" y="{y(ev)-5:.1f}" text-anchor="end" '
+                 f'fill="var(--accent)" font-family="\'IBM Plex Mono\',monospace" '
+                 f'font-size="9" font-weight="600">≈R$ {ev:,.1f} bi (proj.)</text>')
     # CANCELAMENTOS: linha vertical vermelha na data, com o tamanho cancelado.
     # Rótulos alternam em 2 níveis verticais p/ não colidir quando estão próximos.
     vis = [(cd, cq) for cd, cq in sorted(cancs) if d0 <= cd <= d1]
@@ -1081,14 +1110,22 @@ def _treasury_hist_section(ticker: str, rec: pd.DataFrame) -> str:
         ly = yt + 1 if i % 2 == 0 else yt + 12
         s.append(f'<text x="{xc:.1f}" y="{ly:.1f}" text-anchor="middle" fill="var(--sell)" '
                  f'font-family="\'IBM Plex Mono\',monospace" font-size="9" font-weight="600">{lbl}</text>')
-    s.append(f'<text class="svg-bm" x="{padL}" y="{padT-7}">ações em tesouraria · R$ bi (custo no balanço) · <tspan fill="var(--sell)">▏</tspan> cancelamento</text></svg>')
+    leg = (' · <tspan fill="var(--accent)">◌ </tspan>projeção (FR, aguardando ITR)' if proj else '')
+    s.append(f'<text class="svg-bm" x="{padL}" y="{padT-7}">ações em tesouraria · R$ bi (custo no balanço) · <tspan fill="var(--sell)">▏</tspan> cancelamento{leg}</text></svg>')
     peak = max(pts, key=lambda t: t[1])
+    proj_note = ""
+    if proj:
+        cd, cq = future[-1]
+        proj_note = (f' Cancelamento de <b>{_qtd(cq)}</b> ações aprovado em {_data(cd.isoformat())} '
+                     f'(Fato Relevante) ainda não entrou nos balanços — a <b style="color:var(--accent)">'
+                     f'linha tracejada</b> projeta a queda para <b>≈R$ {proj[-1][1]:,.1f} bi</b> '
+                     f'(custo médio), a confirmar no próximo ITR.')
     return f"""
   <h2>Ações em tesouraria no tempo <span class="h-meta">DFP + ITR · {d0.year}–{d1.year}</span></h2>
   <p class="lead">Saldo de <b>ações em tesouraria</b> (custo, R$) no balanço — <b>DFP anual + ITR trimestral</b>,
     a série <b>mais longa</b> disponível. Sobe com a recompra; as <b style="color:var(--sell)">verticais vermelhas</b>
     marcam os <b>cancelamentos</b> de ações em tesouraria (as quedas). Pico de
-    <b>R$ {peak[1]:,.1f} bi</b> em {_data(peak[0].isoformat())}; hoje <b>R$ {vv:,.1f} bi</b>.</p>
+    <b>R$ {peak[1]:,.1f} bi</b> em {_data(peak[0].isoformat())}; hoje <b>R$ {vv:,.1f} bi</b>.{proj_note}</p>
   <div class="card"><div class="chart-box">{''.join(s)}</div></div>"""
 
 
