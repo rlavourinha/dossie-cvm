@@ -225,8 +225,8 @@ def _closure_reason(p: dict):
     exq, exv = p.get("exec_disp") or 0, p.get("exec_value_disp") or 0
     sh = exq / p["auth"] if p.get("auth") else 0
     val = exv / p["valor_auth"] if p.get("valor_auth") else 0
-    if sh >= 0.995:
-        return ("limite de ações", f"executou {_qtd(exq)} de {_qtd(p['auth'])} (100%)", "lim")
+    if sh >= 0.99:  # ≥99% do alvo = atingiu o limite de ações (ex. VALE Prog 2, FR confirma "iminente conclusão")
+        return ("limite de ações", f"executou {_qtd(exq)} de {_qtd(p['auth'])} ({sh*100:.0f}%)", "lim")
     if val >= 0.995:
         return ("limite de valor", f"gastou R$ {exv/1e6:,.0f} mi de R$ {p['valor_auth']/1e6:,.0f} mi", "lim")
     if p["end"] >= p["deadline"] - dt.timedelta(days=7):
