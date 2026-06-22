@@ -114,6 +114,7 @@ h2 .h-meta{font:500 11px 'IBM Plex Mono',monospace;color:var(--faint);letter-spa
 .motivo.m-prazo{color:var(--sell);background:rgba(224,113,76,.13);border:1px solid rgba(224,113,76,.32)}
 .motivo.m-disc{color:var(--gold);background:rgba(215,180,90,.14);border:1px solid rgba(215,180,90,.34)}
 .motivo.m-open{color:var(--muted);border:1px solid var(--line)}
+.motivo.m-nodata{color:var(--muted);background:rgba(120,130,140,.10);border:1px dashed var(--line)}
 .motivo-det{font:500 11.5px 'IBM Plex Mono',monospace;color:var(--muted);padding:6px 18px 0}
 .motivo-det b{color:var(--paper);font-weight:600}
 .recon-note{margin:4px 16px 16px;padding:12px 14px;border-left:3px solid var(--gold);

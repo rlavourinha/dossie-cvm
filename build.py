@@ -13,6 +13,7 @@ Não acessa a rede: o deploy é só renderizar + publicar. Parametrizado por tic
 from __future__ import annotations
 
 import datetime as dt
+import re
 import math
 import unicodedata
 from pathlib import Path
@@ -132,11 +133,23 @@ def _daily_buys(ticker: str) -> list[tuple]:
         return []
     d = pd.read_parquet(f)
     d = d[(d["ticker"] == ticker) & (d["operacao"] == "compra")]
+    # filtro OFF-MARKET: descarta compras muito abaixo do mercado (exercício de opção/
+    # plano a strike, NÃO recompra de mercado — ex. Localiza a R$11 c/ mercado a R$45).
+    # Mesma ideia da coluna "vs. mercado" do CVM 44, aplicada ao diário de execução.
+    mk = _market_prices(ticker)
     out = []
     for _, r in d.iterrows():
         do = _date_obj(r["data"])
-        if do is not None:
-            out.append((do, float(r["quantidade"]), float(r.get("preco")) if not _na(r.get("preco")) else None))
+        if do is None:
+            continue
+        pr = float(r.get("preco")) if not _na(r.get("preco")) else None
+        if pr and mk is not None:
+            near = mk[mk["data"] <= do]
+            if len(near):
+                close = float(near["preco"].iloc[-1])
+                if close > 0 and pr < 0.7 * close:
+                    continue  # strike de opção / fora de mercado
+        out.append((do, float(r["quantidade"]), pr))
     return sorted(out)
 
 
@@ -156,7 +169,9 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         if start is None or _na(r.get("qtd_autorizada")):
             continue
         prazo = int(r["prazo_meses"]) if not _na(r.get("prazo_meses")) else 12
+        mnum = re.search(r"(\d+)\s*[ºoª°]\s*programa", str(r.get("assunto") or ""), re.I)
         progs.append(dict(start=start, deadline=start + dt.timedelta(days=round(prazo * 30.44)),
+                          numero=(int(mnum.group(1)) if mnum else None),
                           auth=float(r["qtd_autorizada"]), prazo=prazo, exec=None, exec_date=None,
                           valor_auth=(None if _na(r.get("valor_autorizado")) else float(r["valor_autorizado"])),
                           exec_value=None, doc_aprov=(r.get("link") or ""), doc_encer=""))
@@ -199,6 +214,8 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         vol = sum(q * pr for d, q, pr in b if pr)
         qty = sum(q for d, q, pr in b if pr)
         p["preco_med"] = vol / qty if qty else None
+    info = companies.COMPANIES.get(ticker, {})
+    exec_desde = _date_obj(info["exec_desde"]) if info.get("exec_desde") else None
     for p in progs:
         # executado de EXIBIÇÃO: OFICIAL do comunicado se houver (a verdade); senão o
         # diário validado da tesouraria. ATENÇÃO: o formulário "Posição Individual" da
@@ -211,6 +228,13 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
             ev = p["exec_real"] * p["preco_med"]
         p["exec_value_disp"] = ev
         p["exec_fonte"] = "oficial" if p.get("exec") else ("tesouraria" if p.get("exec_real") else None)
+        # programa que começou ANTES do início da série diária de tesouraria: a
+        # execução não é observável -> "sem dado" (honesto), não 0%. Zera a curva.
+        if exec_desde and p["start"] < exec_desde and not p.get("exec"):
+            p["sem_dados"] = True
+            p["exec_disp"] = p["exec_value_disp"] = p["exec_real"] = None
+            p["cum"] = []
+            p["exec_fonte"] = "sem dados"
         p["reason"] = _closure_reason(p)
     return progs
 
@@ -220,6 +244,9 @@ def _closure_reason(p: dict):
     limite de ações, limite de valor (R$), fim do prazo, ou decisão antecipada do
     Conselho (nenhum teto atingido). Retorna (rótulo, detalhe, classe) ou None se
     ainda em andamento."""
+    if p.get("sem_dados"):
+        return ("sem dado de execução",
+                "programa anterior ao início da série diária de tesouraria (2019)", "nodata")
     if not p.get("end"):
         return None
     exq, exv = p.get("exec_disp") or 0, p.get("exec_value_disp") or 0
@@ -344,6 +371,10 @@ def _prog_panel(p: dict, idx: int) -> str:
     s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Execução do programa {idx}">']
     # eixo base
     s.append(f'<line class="svg-zero" x1="{padL}" y1="{ybot}" x2="{x(p["deadline"]):.1f}" y2="{ybot}"/>')
+    if p.get("sem_dados"):
+        s.append(f'<text x="{(padL + x(p["deadline"]))/2:.1f}" y="{(ytop+ybot)/2:.1f}" '
+                 f'text-anchor="middle" fill="var(--muted)" font-size="11" font-style="italic">'
+                 f'sem dado de execução · formulário de tesouraria começa em 2019</text>')
     # execução observada DIA A DIA (tesouraria) — pode estar incompleta no mês corrente
     cum = p.get("cum")
     daily_end, xe = None, None
@@ -427,7 +458,7 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
             motivo = (f'<span class="motivo m-{rsn[2]}" title="{rsn[1]}">{rsn[0]}</span>')
         else:
             motivo = '<span class="motivo m-open">em andamento</span>'
-        head = (f'<div class="prog-h"><span class="prog-n">Programa {i} {motivo}</span>'
+        head = (f'<div class="prog-h"><span class="prog-n">Programa {p.get("numero") or i} {motivo}</span>'
                 f'<span class="muted">início {_data(p["start"].isoformat())} · {fim} · '
                 f'{p["prazo"]} meses{res}{pm}</span></div>'
                 + (f'<div class="motivo-det">Encerramento por <b>{rsn[0]}</b> — {rsn[1]}.</div>' if rsn else ''))
@@ -470,7 +501,7 @@ def _recompra_section(rec: pd.DataFrame, ticker: str) -> tuple[str, dict]:
                     ) if ex else "ainda sem execução reportada"
         open_html += f"""
   <div class="open-prog">
-    <div class="op-head"><span class="op-tag">Programa {i}</span>
+    <div class="op-head"><span class="op-tag">Programa {p.get("numero") or i}</span>
       <span class="motivo m-open">em andamento</span></div>
     <div class="op-grid">
       <div class="opc"><div class="opl">Início</div><div class="opv">{_data(p["start"].isoformat())}</div></div>
@@ -493,12 +524,15 @@ def _recompra_section(rec: pd.DataFrame, ticker: str) -> tuple[str, dict]:
         evd = p.get("exec_value_disp")
         preco_off = (evd / ex) if (evd and ex) else None
         fonte = ' <span class="faint">(tesouraria)</span>' if p.get("exec_fonte") == "tesouraria" else ""
-        execu = (f'{_qtd(ex)} <span class="faint">({pct:.0f}%)</span>{fonte}'
-                 + (f'<br><span class="ag-sub">{_vol(evd)} · {_preco(preco_off)} méd</span>'
-                    if evd else ""))
+        if p.get("sem_dados"):
+            execu = '<span class="faint">sem dado</span>'
+        else:
+            execu = (f'{_qtd(ex)} <span class="faint">({pct:.0f}%)</span>{fonte}'
+                     + (f'<br><span class="ag-sub">{_vol(evd)} · {_preco(preco_off)} méd</span>'
+                        if evd else ""))
         docs = f'{_doclink(p.get("doc_aprov"), "aprov")} · {_doclink(p.get("doc_encer"), "encerr")}'
         rows.append(
-            f'<tr><td class="strong">Programa {i}</td>'
+            f'<tr><td class="strong">Programa {p.get("numero") or i}</td>'
             f'<td class="muted">{_data(p["start"].isoformat())} → {_data(p["end"].isoformat())}</td>'
             f'<td>{lim(p)}</td>'
             f'<td class="num strong">{execu}</td>'

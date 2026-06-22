@@ -19,6 +19,14 @@ COMPANIES = {
         "setor": "Mineração · Minério de ferro",
         "cnpj": "33.592.510/0001-54",
     },
+    "RENT3": {
+        "nome": "Localiza Rent a Car",
+        "setor": "Aluguel de carros · Mobilidade",
+        "cnpj": "16.670.085/0001-55",
+        # diário de tesouraria começa em 2019 -> programas que iniciam antes
+        # (9º/2017 e 10º/2018) ficam "sem dado de execução", não 0%.
+        "exec_desde": "2019-07-01",
+    },
 }
 
 # Empresa em foco no v1 (a primeira da lista quando houver mais).
