@@ -125,17 +125,16 @@ def _date_obj(s):
         return None
 
 
-def _daily_buys(ticker: str) -> list[tuple]:
-    """Compras diárias da tesouraria (execução real da recompra), validadas por
-    saldo. (data_obj, quantidade, preco). Vazio se o arquivo não existir."""
+def _daily_all(ticker: str) -> list[tuple]:
+    """TODAS as compras diárias da tesouraria, classificadas em MERCADO (recompra
+    real) vs OFF-MARKET (exercício de opção/plano a strike abaixo do mercado — NÃO é
+    recompra). (data_obj, quantidade, preco, is_market). O histórico fica salvo;
+    a classificação é por preço vs fechamento COTAHIST (mesma ideia do 'vs. mercado')."""
     f = BASE / "data" / "recompra_diaria.parquet"
     if not f.exists():
         return []
     d = pd.read_parquet(f)
     d = d[(d["ticker"] == ticker) & (d["operacao"] == "compra")]
-    # filtro OFF-MARKET: descarta compras muito abaixo do mercado (exercício de opção/
-    # plano a strike, NÃO recompra de mercado — ex. Localiza a R$11 c/ mercado a R$45).
-    # Mesma ideia da coluna "vs. mercado" do CVM 44, aplicada ao diário de execução.
     mk = _market_prices(ticker)
     out = []
     for _, r in d.iterrows():
@@ -143,14 +142,25 @@ def _daily_buys(ticker: str) -> list[tuple]:
         if do is None:
             continue
         pr = float(r.get("preco")) if not _na(r.get("preco")) else None
+        is_market = True
         if pr and mk is not None:
             near = mk[mk["data"] <= do]
             if len(near):
                 close = float(near["preco"].iloc[-1])
                 if close > 0 and pr < 0.7 * close:
-                    continue  # strike de opção / fora de mercado
-        out.append((do, float(r["quantidade"]), pr))
+                    is_market = False  # strike de opção / fora de mercado
+        out.append((do, float(r["quantidade"]), pr, is_market))
     return sorted(out)
+
+
+def _daily_buys(ticker: str) -> list[tuple]:
+    """Só a recompra de MERCADO (exclui exercício de opção). (data, qtd, preco)."""
+    return [(d, q, pr) for d, q, pr, m in _daily_all(ticker) if m]
+
+
+def _daily_options(ticker: str) -> list[tuple]:
+    """Só exercício de opção / off-market (preservado p/ exibição). (data, qtd, preco)."""
+    return [(d, q, pr) for d, q, pr, m in _daily_all(ticker) if not m]
 
 
 def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
@@ -214,6 +224,21 @@ def _programs(rec: pd.DataFrame, ticker: str) -> list[dict]:
         vol = sum(q * pr for d, q, pr in b if pr)
         qty = sum(q for d, q, pr in b if pr)
         p["preco_med"] = vol / qty if qty else None
+    # exercício de opção / off-market: PRESERVA e acumula em separado (não é recompra)
+    for d, q, pr in _daily_options(ticker):
+        ativo = [p for p in progs if p["start"] <= d < (progs[progs.index(p) + 1]["start"] if progs.index(p) + 1 < len(progs) else dt.date(2100, 1, 1))]
+        if ativo:
+            ativo[-1].setdefault("opc", []).append((d, q, pr))
+    for p in progs:
+        o = sorted(p.get("opc", []))
+        cum, acc = [], 0.0
+        for d, q, pr in o:
+            acc += q
+            cum.append((d, acc))
+        p["opc_cum"] = cum
+        p["opc_total"] = acc if cum else 0
+        oq = sum(q for d, q, pr in o if pr)
+        p["opc_preco"] = (sum(q * pr for d, q, pr in o if pr) / oq) if oq else None
     info = companies.COMPANIES.get(ticker, {})
     exec_desde = _date_obj(info["exec_desde"]) if info.get("exec_desde") else None
     for p in progs:
@@ -398,6 +423,16 @@ def _prog_panel(p: dict, idx: int) -> str:
         s.append(f'<polyline points="{poly}" fill="none" stroke="var(--buy)" stroke-width="2"/>')
         for px, py in buy_pts:
             s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="2.2" fill="var(--buy)"/>')
+    # exercício de OPÇÃO / off-market (preservado, NÃO conta como recompra) — roxo
+    opc = p.get("opc_cum")
+    if opc:
+        op_pts = [(x(d), y(c)) for d, c in opc]
+        op_poly = " ".join(f"{px:.1f},{py:.1f}" for px, py in op_pts)
+        s.append(f'<polyline points="{padL},{ybot} {op_poly}" fill="none" stroke="#9B8CFF" stroke-width="1.6" stroke-dasharray="3 3" opacity=".85"/>')
+        for px, py in op_pts:
+            s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="2.1" fill="#9B8CFF"/>')
+        ox, oy = op_pts[-1]
+        s.append(f'<text class="svg-tkr" x="{ox+5:.1f}" y="{oy+3:.1f}" fill="#9B8CFF">opção {_qtd(p["opc_total"])}</text>')
     # EXECUTADO FINAL (oficial do encerramento = a verdade); o diário é complementar.
     # Sem doc de execução ainda (programa em aberto), cai pro diário acumulado.
     final = p.get("exec") or daily_end
@@ -443,6 +478,8 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
     panels = []
     for i, p in enumerate(progs, 1):
         pm = f' · preço médio {_preco(p["preco_med"])}' if p.get("preco_med") else ""
+        op = (f' · <span style="color:#9B8CFF">+ {_qtd(p["opc_total"])} via exercício de opção</span>'
+              f' ({_preco(p["opc_preco"])} méd, não recompra)') if p.get("opc_total") else ""
         final = p.get("exec_disp")   # já limitado ao teto autorizado
         if final:
             pct = 100 * final / p["auth"] if p["auth"] else 0
@@ -460,7 +497,7 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
             motivo = '<span class="motivo m-open">em andamento</span>'
         head = (f'<div class="prog-h"><span class="prog-n">Programa {p.get("numero") or i} {motivo}</span>'
                 f'<span class="muted">início {_data(p["start"].isoformat())} · {fim} · '
-                f'{p["prazo"]} meses{res}{pm}</span></div>'
+                f'{p["prazo"]} meses{res}{pm}{op}</span></div>'
                 + (f'<div class="motivo-det">Encerramento por <b>{rsn[0]}</b> — {rsn[1]}.</div>' if rsn else ''))
         note = _reconcile_note(p, ticker)
         panels.append(f'<div class="card prog-card">{head}<div class="chart-box">{_prog_panel(p, i)}</div>{note}</div>')
@@ -473,7 +510,8 @@ def _prog_exec_section(rec: pd.DataFrame, ticker: str) -> str:
     <b>curva verde</b> é a execução diária da tesouraria (segue <b>plana</b> depois da última compra, pois as ações
     ficam em tesouraria até o programa encerrar) e pode estar <b>parcial</b> no mês corrente. A
     <b>linha dourada</b> é o teto de ações, a <b>vertical vermelha</b> a <b>validade</b> nominal e a
-    <b>vertical teal</b> o <b>encerramento de fato</b>.</p>
+    <b>vertical teal</b> o <b>encerramento de fato</b>. A <b style="color:#9B8CFF">linha/pontos roxos</b> são
+    <b>exercício de opção</b> (strike abaixo do mercado — preservado para histórico, mas <b>não conta como recompra</b>).</p>
   <div class="prog-grid">{''.join(reversed(panels))}</div>"""
 
 
